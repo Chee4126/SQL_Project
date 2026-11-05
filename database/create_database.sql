@@ -1,0 +1,1 @@
+-- TODO: Tạo database ql_ktx.
