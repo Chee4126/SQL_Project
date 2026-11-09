@@ -4,7 +4,9 @@
 
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
-  color: #222;
-  background: #f7f8fa;
+  min-width: 360px;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  color: #263b50;
+  background: #f5f7fa;
+  -webkit-font-smoothing: antialiased;
 }

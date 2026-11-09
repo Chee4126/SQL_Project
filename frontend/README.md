@@ -2,8 +2,27 @@
 
 Giao diện React + Vite.
 
+## Chức năng hiện có
+
+- **Dịch vụ:** xem danh mục, thêm/cập nhật tên, đơn giá và đơn vị; ghi nhận
+  mức sử dụng theo mã sinh viên; tra cứu tổng hợp sử dụng theo khoảng ngày.
+  Backend chốt đơn giá tại thời điểm ghi nhận nên cập nhật giá không đổi lịch
+  sử dụng cũ.
+- **Xe:** đăng ký vé tháng theo sinh viên và kỳ; lọc danh sách đăng ký; ghi
+  nhận lượt gửi/lấy. Backend áp dụng mức 100.000 đồng/xe/tháng, giới hạn hai
+  xe mỗi sinh viên/kỳ, miễn phí hai lượt đầu mỗi ngày và tính 3.000 đồng cho
+  mỗi lượt tiếp theo.
+
+Giao diện nhận mã sinh viên do người quản lý nhập vì backend hiện chưa có API
+tra cứu danh sách sinh viên. Backend vẫn kiểm tra mã sinh viên và các giới hạn
+nghiệp vụ khi lưu. API hiện chưa cung cấp danh sách lịch sử lượt xe hoặc danh
+sách từng giao dịch dịch vụ; giao diện chỉ hiển thị kết quả vừa ghi nhận và
+báo cáo tổng hợp theo nhóm.
+
 ## Cài đặt và chạy
 ```bash
 npm install
 npm run dev
 ```
+
+Đặt `VITE_API_URL` nếu backend không chạy tại `http://127.0.0.1:8000/api`.
