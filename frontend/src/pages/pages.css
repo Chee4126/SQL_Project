@@ -1,0 +1,4 @@
+.login-wrap { display: grid; place-items: center; min-height: 100vh; }
+.login-card { width: 340px; }
+.search-row { display: flex; gap: 10px; margin-bottom: 15px; }
+.search-row input { flex: 1; }
