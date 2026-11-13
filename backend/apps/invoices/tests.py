@@ -1,9 +1,11 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
 from apps.invoices.models import Invoice
+from apps.rooms.models import Room, RoomAssignment
 from apps.services.models import Service, ServiceUsage
 from apps.students.models import Student
 from apps.vehicles.models import MonthlyVehicleRegistration, Vehicle, VehicleEvent
@@ -12,6 +14,8 @@ from apps.vehicles.models import MonthlyVehicleRegistration, Vehicle, VehicleEve
 # Kiểm tra tổng hợp từng khoản và các ràng buộc lập hóa đơn theo SRS.
 class InvoiceApiTests(APITestCase):
     def setUp(self):
+        user = get_user_model().objects.create_user(username="staff", password="test-pass")
+        self.client.force_authenticate(user=user)
         self.student = Student.objects.create(student_id="SV001", name="Nguyen An")
 
     def generate(self, **overrides):
@@ -61,8 +65,8 @@ class InvoiceApiTests(APITestCase):
         self.assertEqual(Decimal(response.data["room_amount"]), Decimal("500000.00"))
         self.assertEqual(Decimal(response.data["service_amount"]), Decimal("30000.00"))
         self.assertEqual(Decimal(response.data["vehicle_amount"]), Decimal("100000.00"))
-        self.assertEqual(Decimal(response.data["parking_amount"]), Decimal("3000.00"))
-        self.assertEqual(Decimal(response.data["total_amount"]), Decimal("633000.00"))
+        self.assertEqual(Decimal(response.data["parking_amount"]), Decimal("0.00"))
+        self.assertEqual(Decimal(response.data["total_amount"]), Decimal("630000.00"))
         self.assertEqual(response.data["status"], Invoice.PaymentStatus.UNPAID)
 
     def test_regeneration_updates_unpaid_invoice_and_keeps_room_amount(self):
@@ -126,29 +130,67 @@ class InvoiceApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Invoice.objects.count(), 0)
 
-    def test_monthly_student_cost_report_is_sorted_and_filtered(self):
+    def test_monthly_student_cost_report_sums_residents_without_invoices(self):
         second_student = Student.objects.create(
             student_id="SV002",
             name="Tran Binh",
         )
-        first_invoice = self.generate()
-        second_invoice = self.client.post(
-            "/api/invoices/generate",
-            {
-                "student_id": second_student.pk,
-                "month": 11,
-                "year": 2026,
-                "room_amount": "300000.00",
-            },
-            format="json",
+        first_room = Room.objects.create(
+            room_id="P101",
+            name="Phòng 101",
+            monthly_price=Decimal("1800000.00"),
+            max_occupants=4,
+        )
+        second_room = Room.objects.create(
+            room_id="P102",
+            name="Phòng 102",
+            monthly_price=Decimal("250000.00"),
+            max_occupants=8,
+        )
+        RoomAssignment.objects.create(
+            student=self.student,
+            room=first_room,
+            start_date=date(2026, 11, 6),
+        )
+        RoomAssignment.objects.create(
+            student=second_student,
+            room=second_room,
+            start_date=date(2026, 10, 31),
+            end_date=date(2026, 11, 1),
+        )
+        RoomAssignment.objects.create(
+            student=second_student,
+            room=second_room,
+            start_date=date(2026, 11, 1),
+            end_date=date(2026, 12, 1),
+        )
+        service = Service.objects.create(
+            name="Giặt là",
+            price=Decimal("15000.00"),
+            unit="kg",
+        )
+        ServiceUsage.objects.create(
+            student=self.student,
+            service=service,
+            used_at=datetime(2026, 11, 6, 9, tzinfo=timezone.utc),
+            quantity=2,
+            applied_price=Decimal("15000.00"),
+        )
+        MonthlyVehicleRegistration.objects.create(
+            student=self.student,
+            vehicle=Vehicle.objects.create(
+                plate_number="51A-12345",
+                vehicle_type="Xe máy",
+            ),
+            month=11,
+            year=2026,
+            monthly_price=Decimal("100000.00"),
         )
         response = self.client.get(
             "/api/reports/monthly-student-costs",
             {"month": 11, "year": 2026},
         )
 
-        self.assertEqual(first_invoice.status_code, 201)
-        self.assertEqual(second_invoice.status_code, 201)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             [row["student_id"] for row in response.data],
@@ -156,8 +198,35 @@ class InvoiceApiTests(APITestCase):
         )
         self.assertEqual(
             Decimal(response.data[0]["total_amount"]),
-            Decimal("500000.00"),
+            Decimal("1930000.00"),
         )
+        self.assertEqual(Decimal(response.data[0]["room_amount"]), Decimal("1800000.00"))
+        self.assertEqual(Decimal(response.data[0]["service_amount"]), Decimal("30000.00"))
+        self.assertEqual(Decimal(response.data[0]["vehicle_amount"]), Decimal("100000.00"))
+        self.assertEqual(Decimal(response.data[1]["total_amount"]), Decimal("250000.00"))
+        self.assertNotIn("status", response.data[0])
+
+    def test_monthly_student_cost_report_excludes_residents_outside_period(self):
+        room = Room.objects.create(
+            room_id="P103",
+            name="Phòng 103",
+            monthly_price=Decimal("1800000.00"),
+            max_occupants=4,
+        )
+        RoomAssignment.objects.create(
+            student=self.student,
+            room=room,
+            start_date=date(2026, 10, 1),
+            end_date=date(2026, 11, 1),
+        )
+
+        response = self.client.get(
+            "/api/reports/monthly-student-costs",
+            {"month": 11, "year": 2026},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, [])
 
     def test_monthly_student_cost_report_requires_valid_period(self):
         missing_month = self.client.get(

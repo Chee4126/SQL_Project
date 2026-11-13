@@ -1,6 +1,3 @@
-from datetime import datetime, time, timedelta
-from decimal import Decimal
-
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -29,6 +26,7 @@ class MonthlyVehicleRegistrationSerializer(serializers.ModelSerializer):
         source="student",
         queryset=Student.objects.all(),
     )
+    student_name = serializers.CharField(source="student.name", read_only=True)
     plate_number = serializers.CharField(
         source="vehicle_id",
         max_length=20,
@@ -48,6 +46,7 @@ class MonthlyVehicleRegistrationSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "student_id",
+            "student_name",
             "plate_number",
             "vehicle_type",
             "vehicle",
@@ -150,15 +149,9 @@ class MonthlyVehicleRegistrationSerializer(serializers.ModelSerializer):
             ) from exc
 
 
-# Nhận dữ liệu lượt gửi/lấy và tự xác định lượt miễn phí hay tính phí.
+# Ghi nhận lượt gửi/lấy thuộc một đăng ký vé tháng.
 class VehicleEventSerializer(serializers.ModelSerializer):
     registration_id = serializers.IntegerField(read_only=True)
-    is_free = serializers.BooleanField(read_only=True)
-    fee = serializers.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        read_only=True,
-    )
 
     # Khai báo dữ liệu lượt gửi/lấy được trả về qua API.
     class Meta:
@@ -168,8 +161,6 @@ class VehicleEventSerializer(serializers.ModelSerializer):
             "registration_id",
             "event_at",
             "event_type",
-            "is_free",
-            "fee",
         ]
         read_only_fields = ["id"]
 
@@ -178,10 +169,9 @@ class VehicleEventSerializer(serializers.ModelSerializer):
             return timezone.make_aware(value, timezone.get_current_timezone())
         return value
 
-    @transaction.atomic
     def create(self, validated_data):
-        registration = MonthlyVehicleRegistration.objects.select_for_update().get(
-            pk=self.context["registration_id"]
+        registration = MonthlyVehicleRegistration.objects.get(
+            pk=self.context["registration_id"],
         )
         event_at = validated_data["event_at"]
         local_event_at = timezone.localtime(event_at)
@@ -192,21 +182,7 @@ class VehicleEventSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"event_at": "Thời điểm phải thuộc kỳ đăng ký vé tháng."}
             )
-        local_date = local_event_at.date()
-        day_start = timezone.make_aware(
-            datetime.combine(local_date, time.min),
-            timezone.get_current_timezone(),
-        )
-        next_day_start = day_start + timedelta(days=1)
-        previous_events = VehicleEvent.objects.filter(
-            registration__vehicle_id=registration.vehicle_id,
-            event_at__gte=day_start,
-            event_at__lt=next_day_start,
-        ).count()
-        is_free = previous_events < 2
         return VehicleEvent.objects.create(
             **validated_data,
             registration=registration,
-            is_free=is_free,
-            fee=Decimal("0.00") if is_free else Decimal("3000.00"),
         )

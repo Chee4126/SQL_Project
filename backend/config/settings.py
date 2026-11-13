@@ -15,10 +15,14 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "corsheaders",
     "rest_framework",
+    "rest_framework.authtoken",
+    "apps.accounts",
     "apps.students",
     "apps.services",
     "apps.vehicles",
     "apps.invoices",
+    "apps.rooms",
+    "apps.visitors",
 ]
 
 MIDDLEWARE = [
@@ -59,8 +63,10 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "EXCEPTION_HANDLER": "config.exceptions.vietnamese_exception_handler",
 }
 

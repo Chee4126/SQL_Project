@@ -335,24 +335,6 @@ select:focus {
   box-shadow: 0 0 0 3px rgb(52 134 201 / 10%);
 }
 
-.form-note {
-  padding: 11px 12px;
-  border-radius: 7px;
-  background: #fff8e9;
-  color: #755e30;
-  font-size: 10px;
-  line-height: 1.55;
-}
-
-.form-note strong {
-  display: block;
-  margin-bottom: 4px;
-}
-
-.form-note p {
-  margin: 0;
-}
-
 .primary-button {
   height: 40px;
   border: 0;
@@ -506,6 +488,14 @@ td strong {
   font-weight: 600;
 }
 
+.table-action.danger {
+  color: #b33a32;
+}
+
+.table-action.danger:hover:not(:disabled) {
+  color: #852820;
+}
+
 details summary {
   color: #287bc0;
   cursor: pointer;
@@ -590,31 +580,10 @@ details summary {
   margin-bottom: 14px;
 }
 
-.report-note {
-  margin: 13px 0 0;
-  color: #8a7952;
-  font-size: 10px;
-  line-height: 1.5;
-}
-
 .report-tables {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
-}
-
-.report-not-available {
-  padding: 15px 18px;
-  border: 1px solid #f0dfb8;
-  border-radius: 9px;
-  background: #fff9ec;
-  color: #725d31;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.report-not-available p {
-  margin: 5px 0 0;
 }
 
 .management-page {
@@ -674,6 +643,53 @@ details summary {
 
 .vehicle-filters {
   grid-template-columns: 0.65fr 0.8fr 1.4fr;
+}
+
+.print-period {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #monthly-student-cost-report,
+  #monthly-student-cost-report * {
+    visibility: visible !important;
+  }
+
+  #monthly-student-cost-report {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+
+  #monthly-student-cost-report .no-print {
+    display: none !important;
+  }
+
+  #monthly-student-cost-report .print-period {
+    display: block;
+    margin-bottom: 12px;
+    color: #000;
+  }
+
+  #monthly-student-cost-report .table-wrap {
+    overflow: visible;
+  }
+
+  #monthly-student-cost-report table {
+    min-width: 0;
+    width: 100%;
+  }
 }
 
 @media (max-width: 1100px) {

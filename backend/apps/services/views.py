@@ -19,10 +19,16 @@ class ServiceListCreateView(generics.ListCreateAPIView):
 
 
 # Xem hoặc cập nhật thông tin một dịch vụ.
-class ServiceDetailView(generics.RetrieveUpdateAPIView):
+class ServiceDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Service.objects.all()
     serializer_class = ServiceSerializer
-    http_method_names = ["get", "put", "head", "options"]
+
+    def perform_destroy(self, instance):
+        if instance.usages.exists():
+            raise ValidationError(
+                {"detail": "Không thể xóa dịch vụ đã có lượt sử dụng."}
+            )
+        instance.delete()
 
 
 # Ghi nhận một lần sử dụng dịch vụ của sinh viên.

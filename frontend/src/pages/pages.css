@@ -1,0 +1,13 @@
+.login-wrap { display: grid; place-items: center; min-height: 100vh; }
+.login-card { width: 340px; }
+.search-row { display: flex; gap: 10px; margin-bottom: 15px; }
+.search-row input { flex: 1; }
+.profile-page > .panel { max-width: 760px; }
+.profile-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.profile-password-heading { grid-column: 1 / -1; border-top: 1px solid var(--border-color, #e5e7eb); padding-top: 16px; }
+.profile-password-heading h3, .profile-password-heading p { margin: 0 0 6px; }
+.profile-form .form-actions { grid-column: 1 / -1; }
+@media (max-width: 640px) {
+  .profile-form { grid-template-columns: 1fr; }
+  .profile-password-heading, .profile-form .form-actions { grid-column: auto; }
+}

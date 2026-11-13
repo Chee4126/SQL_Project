@@ -80,7 +80,7 @@ class MonthlyVehicleRegistration(models.Model):
         return f"{self.vehicle_id} - {self.month:02d}/{self.year}"
 
 
-# Lưu lượt gửi/lấy và phí phát sinh của xe tháng.
+# Lưu lượt gửi/lấy của xe đăng ký vé tháng.
 class VehicleEvent(models.Model):
     # Quy định hai loại sự kiện xe được phép ghi nhận.
     class EventType(models.TextChoices):
@@ -100,16 +100,16 @@ class VehicleEvent(models.Model):
         choices=EventType.choices,
         db_column="LoaiLuot",
     )
-    is_free = models.BooleanField(db_column="MienPhi")
+    is_free = models.BooleanField(null=True, blank=True, db_column="MienPhi")
     fee = models.DecimalField(
         max_digits=12,
         decimal_places=2,
-        default=Decimal("0.00"),
+        null=True,
+        blank=True,
         db_column="TienPhat",
     )
 
-    # Ánh xạ sự kiện xe và áp đặt mức phí không âm.
-    # Ánh xạ sự kiện xe và áp đặt mức phí không âm.
+    # Fee columns remain nullable to preserve values recorded by older versions.
     class Meta:
         db_table = "LUOTGUIXE"
         ordering = ["-event_at", "-id"]

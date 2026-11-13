@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
 from apps.services.models import Service, ServiceUsage
@@ -10,6 +11,8 @@ from apps.students.models import Student
 # Kiểm tra ghi nhận sử dụng dịch vụ và các báo cáo.
 class ServiceApiTests(APITestCase):
     def setUp(self):
+        user = get_user_model().objects.create_user(username="staff", password="test-pass")
+        self.client.force_authenticate(user=user)
         self.student = Student.objects.create(student_id="SV001", name="Nguyen An")
         self.service = Service.objects.create(
             name="Giặt là",
@@ -112,6 +115,10 @@ class ServiceApiTests(APITestCase):
 
 # Kiểm tra tạo, cập nhật và kiểm tra đơn giá dịch vụ.
 class ServiceCatalogApiTests(APITestCase):
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="staff", password="test-pass")
+        self.client.force_authenticate(user=user)
+
     def test_create_and_update_service(self):
         create_response = self.client.post(
             "/api/services",
@@ -136,3 +143,36 @@ class ServiceCatalogApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("price", response.data)
+
+    def test_service_delete_is_blocked_by_usage_history(self):
+        service = Service.objects.create(
+            name="Giặt là",
+            price=Decimal("15000.00"),
+            unit="kg",
+        )
+        student = Student.objects.create(student_id="SV010", name="Nguyen An")
+        ServiceUsage.objects.create(
+            student=student,
+            service=service,
+            used_at=datetime(2026, 11, 6, 9, tzinfo=timezone.utc),
+            quantity=1,
+            applied_price=Decimal("15000.00"),
+        )
+
+        response = self.client.delete(f"/api/services/{service.pk}")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Service.objects.filter(pk=service.pk).exists())
+        self.assertIn("lượt sử dụng", response.data["detail"])
+
+    def test_service_without_usage_can_be_deleted(self):
+        service = Service.objects.create(
+            name="Nước uống",
+            price=Decimal("5000.00"),
+            unit="chai",
+        )
+
+        response = self.client.delete(f"/api/services/{service.pk}")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Service.objects.filter(pk=service.pk).exists())

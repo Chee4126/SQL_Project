@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
+import { API_URL, apiFetch } from './api'
+import StudentsPage from './pages/StudentsPage'
+import AccountsPage from './pages/AccountsPage'
+import RoomsPage from './pages/RoomsPage'
+import VisitorsPage from './pages/VisitorsPage'
+import ProfilePage from './pages/ProfilePage'
+import StudentSelect from './components/StudentSelect'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
 const PAYMENT_STATUSES = [
   { value: '', label: 'Tất cả trạng thái' },
   { value: 'CHUA_THANH_TOAN', label: 'Chưa thanh toán' },
@@ -70,7 +76,7 @@ function getRequestErrorMessage(error, fallback) {
   return getErrorMessage(error?.message, fallback)
 }
 
-function App() {
+function App({ user, onLogout, onUserUpdated }) {
   const [filters, setFilters] = useState({
     ...initialPeriod,
     status: '',
@@ -95,6 +101,7 @@ function App() {
   })
   const [reportErrors, setReportErrors] = useState({})
   const [reportLoading, setReportLoading] = useState(false)
+  const [printRequested, setPrintRequested] = useState(false)
   const [services, setServices] = useState([])
   const [serviceUsages, setServiceUsages] = useState([])
   const [serviceLoading, setServiceLoading] = useState(false)
@@ -150,7 +157,7 @@ function App() {
     })
 
     try {
-      const response = await fetch(`${API_URL}/invoices?${params.toString()}`)
+      const response = await apiFetch(`${API_URL}/invoices?${params.toString()}`)
       const data = await response.json()
       if (!response.ok) throw new Error(getErrorMessage(data, 'Không thể tải hóa đơn.'))
       setInvoices(data)
@@ -190,7 +197,7 @@ function App() {
       const results = await Promise.all(
         requests.map(async ([key, path]) => {
           try {
-            const response = await fetch(`${API_URL}${path}`)
+            const response = await apiFetch(`${API_URL}${path}`)
             const data = await response.json()
             if (!response.ok) {
               throw new Error(getErrorMessage(data, 'Không thể tải báo cáo.'))
@@ -222,12 +229,21 @@ function App() {
     if (page === 'reports') loadReports()
   }, [page, loadReports])
 
+  useEffect(() => {
+    if (!printRequested) return undefined
+
+    const resetPrintRequest = () => setPrintRequested(false)
+    window.addEventListener('afterprint', resetPrintRequest)
+    window.print()
+    return () => window.removeEventListener('afterprint', resetPrintRequest)
+  }, [printRequested])
+
   // Tải danh mục dịch vụ; dữ liệu giá hiện tại không làm thay đổi giá đã chốt.
   const loadServices = useCallback(async () => {
     setServiceLoading(true)
     setServiceError('')
     try {
-      const response = await fetch(`${API_URL}/services`)
+      const response = await apiFetch(`${API_URL}/services`)
       const data = await response.json()
       if (!response.ok) throw new Error(getErrorMessage(data, 'Không thể tải dịch vụ.'))
       setServices(data)
@@ -245,7 +261,7 @@ function App() {
     setServiceReportError('')
     try {
       const params = new URLSearchParams(serviceDateRange)
-      const response = await fetch(`${API_URL}/reports/service-usage?${params}`)
+      const response = await apiFetch(`${API_URL}/reports/service-usage?${params}`)
       const data = await response.json()
       if (!response.ok) throw new Error(getErrorMessage(data, 'Không thể tải báo cáo dịch vụ.'))
       setServiceUsages(data)
@@ -271,7 +287,7 @@ function App() {
     setServiceError('')
     setServiceMessage('')
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_URL}/services${editingServiceId ? `/${editingServiceId}` : ''}`,
         {
           method: editingServiceId ? 'PUT' : 'POST',
@@ -307,7 +323,7 @@ function App() {
     setServiceError('')
     setServiceMessage('')
     try {
-      const response = await fetch(`${API_URL}/service-usages`, {
+      const response = await apiFetch(`${API_URL}/service-usages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -341,6 +357,31 @@ function App() {
     setServiceError('')
   }
 
+  async function removeService(service) {
+    if (!window.confirm(`Xóa dịch vụ "${service.name}"? Dịch vụ đã phát sinh lượt sử dụng sẽ không thể xóa.`)) return
+
+    setServiceSubmitting(true)
+    setServiceError('')
+    setServiceMessage('')
+    try {
+      const response = await apiFetch(`${API_URL}/services/${service.id}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(getErrorMessage(data, 'Không thể xóa dịch vụ.'))
+      }
+      setServiceMessage(`Đã xóa dịch vụ ${service.name}.`)
+      if (editingServiceId === service.id) {
+        setEditingServiceId(null)
+        setServiceForm({ name: '', price: '', unit: '' })
+      }
+      await loadServices()
+    } catch (requestError) {
+      setServiceError(getRequestErrorMessage(requestError, 'Không thể xóa dịch vụ.'))
+    } finally {
+      setServiceSubmitting(false)
+    }
+  }
+
   // Lọc danh sách đăng ký theo kỳ và mã sinh viên tùy chọn.
   const loadRegistrations = useCallback(async () => {
     setRegistrationLoading(true)
@@ -350,7 +391,7 @@ function App() {
       if (value) params.set(key, value)
     })
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_URL}/monthly-vehicle-registrations?${params}`,
       )
       const data = await response.json()
@@ -375,7 +416,7 @@ function App() {
     setVehicleError('')
     setVehicleMessage('')
     try {
-      const response = await fetch(`${API_URL}/monthly-vehicle-registrations`, {
+      const response = await apiFetch(`${API_URL}/monthly-vehicle-registrations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -409,14 +450,14 @@ function App() {
     }
   }
 
-  // Gửi lượt GUI/LAY; phí và lượt miễn phí do backend tự quyết định.
+  // Ghi nhận lượt gửi/lấy của xe trong kỳ đăng ký.
   async function recordVehicleEvent(event) {
     event.preventDefault()
     setEventSubmitting(true)
     setVehicleError('')
     setVehicleMessage('')
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_URL}/monthly-vehicle-registrations/${eventForm.registration_id}/events`,
         {
           method: 'POST',
@@ -429,11 +470,7 @@ function App() {
       )
       const data = await response.json()
       if (!response.ok) throw new Error(getErrorMessage(data, 'Không thể ghi nhận lượt xe.'))
-      setVehicleMessage(
-        data.is_free
-          ? 'Lượt đã được ghi nhận và miễn phí.'
-          : `Lượt đã được ghi nhận; phí phát sinh ${formatCurrency(data.fee)}.`,
-      )
+      setVehicleMessage('Đã ghi nhận lượt gửi/lấy xe.')
     } catch (requestError) {
       setVehicleError(getRequestErrorMessage(requestError, 'Không thể ghi nhận lượt xe.'))
     } finally {
@@ -441,7 +478,7 @@ function App() {
     }
   }
 
-  // Backend tự tính dịch vụ và phí xe; form chỉ gửi kỳ, sinh viên, tiền phòng.
+  // Backend tự tính tiền dịch vụ và vé tháng; lượt gửi/lấy không tính phí.
   async function generateInvoice(event) {
     event.preventDefault()
     setSubmitting(true)
@@ -456,7 +493,7 @@ function App() {
     if (form.room_amount !== '') payload.room_amount = form.room_amount
 
     try {
-      const response = await fetch(`${API_URL}/invoices/generate`, {
+      const response = await apiFetch(`${API_URL}/invoices/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -485,7 +522,7 @@ function App() {
     setMessage('')
 
     try {
-      const response = await fetch(`${API_URL}/invoices/${invoice.id}/status`, {
+      const response = await apiFetch(`${API_URL}/invoices/${invoice.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -547,11 +584,41 @@ function App() {
         >
           <span aria-hidden="true">◈</span> Quản lý dịch vụ
         </button>
-        <button
+                  <button
           className={`nav-item ${page === 'vehicles' ? 'active' : ''}`}
           onClick={() => setPage('vehicles')}
         >
           <span aria-hidden="true">▰</span> Quản lý xe
+        </button>
+        <button
+          className={`nav-item ${page === 'students' ? 'active' : ''}`}
+          onClick={() => setPage('students')}
+        >
+          <span aria-hidden="true">☰</span> Sinh viên
+        </button>
+                <button
+          className={`nav-item ${page === 'rooms' ? 'active' : ''}`}
+          onClick={() => setPage('rooms')}
+        >
+          <span aria-hidden="true">⌂</span> Phòng ở
+        </button>
+        <button
+          className={`nav-item ${page === 'visitors' ? 'active' : ''}`}
+          onClick={() => setPage('visitors')}
+        >
+          <span aria-hidden="true">☺</span> Khách thăm
+        </button>
+        <button
+          className={`nav-item ${page === 'accounts' ? 'active' : ''}`}
+          onClick={() => setPage('accounts')}
+        >
+          <span aria-hidden="true">⚿</span> Tài khoản
+        </button>
+        <button
+          className={`nav-item ${page === 'profile' ? 'active' : ''}`}
+          onClick={() => setPage('profile')}
+        >
+          <span aria-hidden="true">◎</span> Hồ sơ tài khoản
         </button>
         <div className="sidebar-note">
           <span aria-hidden="true">i</span>
@@ -560,7 +627,12 @@ function App() {
               invoices: 'Hóa đơn được tổng hợp từ dịch vụ và dữ liệu vé xe đã ghi nhận.',
               reports: 'Báo cáo chỉ tổng hợp trên các nguồn dữ liệu đã có trong hệ thống.',
               services: 'Giá dịch vụ được lưu theo từng lần sử dụng để bảo toàn lịch sử.',
-              vehicles: 'Mỗi sinh viên tối đa 2 xe/tháng; hai lượt đầu mỗi ngày được miễn phí.',
+              vehicles: 'Mỗi sinh viên tối đa 2 xe vé tháng; lượt gửi/lấy phải thuộc kỳ đăng ký.',
+              students: 'Hồ sơ sinh viên là cơ sở cho phân phòng, dịch vụ, xe và hóa đơn.',
+              rooms: 'Đơn giá và sức chứa được cấu hình trực tiếp trên từng phòng.',
+              visitors: 'Mỗi lượt thăm ghi nhận thời gian đến và rời đi của khách.',
+              accounts: 'Quản lý danh sách và tạo tài khoản Staff.',
+              profile: 'Cập nhật thông tin cá nhân và mật khẩu tài khoản.',
             }[page]}
           </p>
         </div>
@@ -575,6 +647,11 @@ function App() {
                 reports: 'TỔNG QUAN / BÁO CÁO',
                 services: 'VẬN HÀNH / DỊCH VỤ',
                 vehicles: 'VẬN HÀNH / XE THÁNG',
+                students: 'DANH MỤC / SINH VIÊN',
+                rooms: 'DANH MỤC / PHÒNG Ở',
+                visitors: 'VẬN HÀNH / KHÁCH THĂM',
+                accounts: 'HỆ THỐNG / TÀI KHOẢN',
+                profile: 'TÀI KHOẢN / HỒ SƠ',
               }[page]}
             </p>
             <h1>
@@ -583,10 +660,18 @@ function App() {
                 reports: 'Báo cáo & thống kê',
                 services: 'Quản lý dịch vụ',
                 vehicles: 'Quản lý xe',
+                students: 'Quản lý sinh viên',
+                rooms: 'Quản lý phòng',
+                visitors: 'Quản lý khách thăm',
+                accounts: 'Quản lý tài khoản',
+                profile: 'Hồ sơ tài khoản',
               }[page]}
             </h1>
           </div>
-          <span className="user-badge"><span /> Ban quản lý</span>
+          <span className="user-badge">
+            <span /> {user.username} (Staff)
+            <button className="table-action" onClick={onLogout}>Đăng xuất</button>
+          </span>
         </header>
 
         <section className="intro">
@@ -597,6 +682,11 @@ function App() {
                 reports: 'Báo cáo hoạt động',
                 services: 'Danh mục và sử dụng dịch vụ',
                 vehicles: 'Đăng ký vé tháng và lượt gửi/lấy',
+                students: 'Hồ sơ sinh viên',
+                rooms: 'Phòng và phân phòng',
+                visitors: 'Khách và lượt thăm',
+                accounts: 'Tài khoản nhân viên',
+                profile: 'Thông tin cá nhân và bảo mật tài khoản',
               }[page]}
             </h2>
             <p>
@@ -604,11 +694,18 @@ function App() {
                 invoices: 'Theo dõi chi phí, trạng thái thanh toán và lập hóa đơn cho sinh viên.',
                 reports: 'Tổng hợp chi phí, dịch vụ và đăng ký xe theo tháng được chọn.',
                 services: 'Quản lý đơn giá, ghi nhận sử dụng và xem tổng hợp theo ngày.',
-                vehicles: 'Quản lý đăng ký theo kỳ và tính phí lượt xe theo quy tắc SRS.',
+                vehicles: 'Quản lý đăng ký xe và ghi nhận lượt gửi/lấy trong kỳ.',
+                students: 'Tìm kiếm, thêm mới và cập nhật hồ sơ sinh viên.',
+                rooms: 'Quản lý phòng, đơn giá, sức chứa và lịch sử phân phòng.',
+                visitors: 'Ghi nhận khách đến thăm và thống kê theo tuần hoặc tháng.',
+                accounts: 'Tạo tài khoản cho nhân viên vận hành hệ thống.',
+                profile: 'Cập nhật thông tin cá nhân hoặc đổi mật khẩu.',
               }[page]}
             </p>
           </div>
-          <div className="period-tag">Kỳ {filters.month}/{filters.year}</div>
+          {['invoices', 'reports', 'services', 'vehicles'].includes(page) && (
+            <div className="period-tag">Kỳ {filters.month}/{filters.year}</div>
+          )}
         </section>
 
         {page === 'invoices' ? (
@@ -668,8 +765,8 @@ function App() {
             <section className="summary-grid report-summary" aria-label="Tóm tắt báo cáo">
               <article className="summary-card">
                 <span className="summary-icon icon-blue">₫</span>
-                <div><p>Tổng chi phí hóa đơn</p><strong>{formatCurrency(reportCostTotal)}</strong></div>
-                <small>{reportData.costs.length} hóa đơn đã lập</small>
+                <div><p>Tổng chi phí tháng</p><strong>{formatCurrency(reportCostTotal)}</strong></div>
+                <small>{reportData.costs.length} sinh viên nội trú</small>
               </article>
               <article className="summary-card">
                 <span className="summary-icon icon-green">↗</span>
@@ -683,13 +780,23 @@ function App() {
               </article>
             </section>
 
-            <article className="panel report-panel">
+            <article className="panel report-panel" id="monthly-student-cost-report">
               <div className="panel-heading">
                 <div>
                   <h2>Chi phí theo sinh viên</h2>
-                  <p>Tổng hợp các khoản trong hóa đơn, xếp theo tên sinh viên.</p>
+                  <p>Tổng hợp tiền phòng, dịch vụ và vé xe trong tháng, xếp theo tên sinh viên.</p>
                 </div>
+                <button
+                  className="refresh-button no-print"
+                  onClick={() => setPrintRequested(true)}
+                  disabled={reportLoading || reportData.costs.length === 0}
+                >
+                  In danh sách
+                </button>
               </div>
+              <p className="print-period">
+                Báo cáo chi phí tháng {filters.month}/{filters.year}
+              </p>
               {reportErrors.costs ? (
                 <div className="notice error" role="alert">{reportErrors.costs}</div>
               ) : (
@@ -698,31 +805,25 @@ function App() {
                     <thead>
                       <tr>
                         <th>Sinh viên</th><th>Phòng</th><th>Dịch vụ</th><th>Vé xe</th>
-                        <th>Gửi xe</th><th>Tổng</th><th>Trạng thái</th>
+                        <th>Tổng phải trả</th>
                       </tr>
                     </thead>
                     <tbody>
                       {reportData.costs.length === 0 ? (
-                        <tr><td className="empty-state" colSpan="7">Chưa có hóa đơn trong kỳ.</td></tr>
+                        <tr><td className="empty-state" colSpan="5">Không có sinh viên nội trú trong kỳ.</td></tr>
                       ) : reportData.costs.map((row) => (
                         <tr key={row.student_id}>
                           <td><strong>{row.student_name}</strong><small className="cell-subtitle">{row.student_id}</small></td>
                           <td>{formatCurrency(row.room_amount)}</td>
                           <td>{formatCurrency(row.service_amount)}</td>
                           <td>{formatCurrency(row.vehicle_amount)}</td>
-                          <td>{formatCurrency(row.parking_amount)}</td>
                           <td className="amount-cell">{formatCurrency(row.total_amount)}</td>
-                          <td>{row.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : 'Chưa thanh toán'}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-              <p className="report-note">
-                Ghi chú: báo cáo dùng các hóa đơn đã lập; chưa thể liệt kê toàn bộ
-                sinh viên đang ở vì hệ thống chưa có dữ liệu phân phòng.
-              </p>
             </article>
 
             <div className="report-tables">
@@ -806,14 +907,6 @@ function App() {
               )}
             </article>
 
-            <div className="report-not-available">
-              <strong>Chưa có dữ liệu nguồn cho một số báo cáo trong SRS</strong>
-              <p>
-                Báo cáo sức chứa phòng và báo cáo khách thăm theo tuần/tháng cần
-                dữ liệu loại phòng, phân phòng, khách và lượt thăm. Các model này
-                chưa được triển khai, nên hệ thống không hiển thị số liệu ước đoán.
-              </p>
-            </div>
           </section>
         ) : null}
 
@@ -828,15 +921,11 @@ function App() {
               <span className="heading-icon">＋</span>
             </div>
             <form onSubmit={generateInvoice}>
-              <label>
-                Mã sinh viên
-                <input
-                  required
-                  value={form.student_id}
-                  onChange={(event) => setForm({ ...form, student_id: event.target.value })}
-                  placeholder="Ví dụ: SV001"
-                />
-              </label>
+              <StudentSelect
+                label="Sinh viên"
+                value={form.student_id}
+                onChange={(event) => setForm({ ...form, student_id: event.target.value })}
+              />
               <div className="form-row">
                 <label>
                   Tháng
@@ -873,14 +962,6 @@ function App() {
                   placeholder="Nhập khoản tiền phòng"
                 />
               </label>
-              <div className="form-note">
-                <strong>Lưu ý về tiền phòng</strong>
-                <p>
-                  Chưa có dữ liệu phòng và lịch sử phân phòng trong backend, nên
-                  khoản này cần được quản lý nhập. Dịch vụ, vé tháng và phí gửi xe
-                  sẽ được hệ thống tự cộng.
-                </p>
-              </div>
               <button className="primary-button" type="submit" disabled={submitting}>
                 {submitting ? 'Đang tổng hợp...' : 'Tạo / cập nhật hóa đơn'}
               </button>
@@ -929,14 +1010,12 @@ function App() {
                   ))}
                 </select>
               </label>
-              <label>
-                Mã sinh viên
-                <input
-                  value={filters.student_id}
-                  onChange={(event) => setFilters({ ...filters, student_id: event.target.value })}
-                  placeholder="Tất cả"
-                />
-              </label>
+              <StudentSelect
+                label="Sinh viên"
+                value={filters.student_id}
+                includeAll
+                onChange={(event) => setFilters({ ...filters, student_id: event.target.value })}
+              />
             </div>
 
             {message && <div className="notice success" role="status">{message}</div>}
@@ -1043,13 +1122,6 @@ function App() {
                       placeholder="kg, lần, chai..."
                     />
                   </label>
-                  <div className="form-note">
-                    <strong>Giá dịch vụ trong lịch sử</strong>
-                    <p>
-                      Khi ghi nhận sử dụng, backend lưu lại đơn giá hiện tại.
-                      Thay đổi giá sau đó không làm thay đổi các lần đã tính phí.
-                    </p>
-                  </div>
                   <div className="form-actions">
                     <button className="primary-button" type="submit" disabled={serviceSubmitting}>
                       {serviceSubmitting ? 'Đang lưu...' : editingServiceId ? 'Lưu thay đổi' : 'Thêm dịch vụ'}
@@ -1098,6 +1170,10 @@ function App() {
                             <button className="table-action" onClick={() => startEditingService(service)}>
                               Sửa
                             </button>
+                            {' · '}
+                            <button className="table-action danger" onClick={() => removeService(service)} disabled={serviceSubmitting}>
+                              Xóa
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1116,15 +1192,11 @@ function App() {
                 <span className="heading-icon">＋</span>
               </div>
               <form className="record-form" onSubmit={recordServiceUsage}>
-                <label>
-                  Mã sinh viên
-                  <input
-                    required
-                    value={serviceUsageForm.student_id}
-                    onChange={(event) => setServiceUsageForm({ ...serviceUsageForm, student_id: event.target.value })}
-                    placeholder="Ví dụ: SV001"
-                  />
-                </label>
+                <StudentSelect
+                  label="Sinh viên"
+                  value={serviceUsageForm.student_id}
+                  onChange={(event) => setServiceUsageForm({ ...serviceUsageForm, student_id: event.target.value })}
+                />
                 <label>
                   Dịch vụ
                   <select
@@ -1164,10 +1236,6 @@ function App() {
                   {serviceUsageSubmitting ? 'Đang ghi nhận...' : 'Ghi nhận sử dụng'}
                 </button>
               </form>
-              <p className="report-note">
-                Mã sinh viên phải tồn tại. Số lượng phải lớn hơn 0; backend tự
-                xác thực và không nhận đơn giá từ giao diện.
-              </p>
             </article>
 
             <article className="panel report-panel">
@@ -1205,10 +1273,6 @@ function App() {
                   </table>
                 </div>
               )}
-              <p className="report-note">
-                API hiện trả số liệu tổng hợp, không cung cấp danh sách từng giao
-                dịch; bảng này vì thế hiển thị tổng lượng và tổng tiền theo nhóm.
-              </p>
             </article>
           </section>
         )}
@@ -1228,15 +1292,12 @@ function App() {
                   <span className="heading-icon">▰</span>
                 </div>
                 <form onSubmit={registerVehicle}>
-                  <label>
-                    Mã sinh viên
-                    <input
-                      required
-                      value={registrationForm.student_id}
-                      onChange={(event) => setRegistrationForm({ ...registrationForm, student_id: event.target.value })}
-                      placeholder="Ví dụ: SV001"
-                    />
-                  </label>
+                  <StudentSelect
+                    label="Sinh viên"
+                    value={registrationForm.student_id}
+                    onChange={(event) => setRegistrationForm({ ...registrationForm, student_id: event.target.value })}
+                    disabled={registrationSubmitting}
+                  />
                   <label>
                     Biển số xe
                     <input
@@ -1266,14 +1327,6 @@ function App() {
                       <input required type="number" min="1" max="9999" value={registrationForm.year} onChange={(event) => setRegistrationForm({ ...registrationForm, year: event.target.value })} />
                     </label>
                   </div>
-                  <div className="form-note">
-                    <strong>Quy tắc vé tháng</strong>
-                    <p>
-                      Phí mặc định 100.000 đồng/xe/tháng. Backend giới hạn tối
-                      đa 2 xe mỗi sinh viên/kỳ, mỗi xe chỉ có một chủ đăng ký
-                      trong kỳ.
-                    </p>
-                  </div>
                   <button className="primary-button" type="submit" disabled={registrationSubmitting}>
                     {registrationSubmitting ? 'Đang đăng ký...' : 'Đăng ký xe'}
                   </button>
@@ -1299,14 +1352,16 @@ function App() {
                     Năm
                     <input type="number" min="1" max="9999" value={vehicleFilters.year} onChange={(event) => setVehicleFilters({ ...vehicleFilters, year: event.target.value })} />
                   </label>
-                  <label>
-                    Mã sinh viên
-                    <input value={vehicleFilters.student_id} onChange={(event) => setVehicleFilters({ ...vehicleFilters, student_id: event.target.value })} placeholder="Tất cả sinh viên" />
-                  </label>
+                  <StudentSelect
+                    label="Sinh viên"
+                    value={vehicleFilters.student_id}
+                    includeAll
+                    onChange={(event) => setVehicleFilters({ ...vehicleFilters, student_id: event.target.value })}
+                  />
                 </div>
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>Mã SV</th><th>Biển số</th><th>Loại xe</th><th>Phí vé tháng</th><th>Lượt xe</th></tr></thead>
+                    <thead><tr><th>Sinh viên</th><th>Biển số</th><th>Loại xe</th><th>Phí vé tháng</th><th>Lượt xe</th></tr></thead>
                     <tbody>
                       {registrationLoading && registrations.length === 0 ? (
                         <tr><td className="empty-state" colSpan="5">Đang tải đăng ký...</td></tr>
@@ -1314,7 +1369,10 @@ function App() {
                         <tr><td className="empty-state" colSpan="5">Chưa có xe đăng ký trong kỳ.</td></tr>
                       ) : registrations.map((registration) => (
                         <tr key={registration.id}>
-                          <td>{registration.student_id}</td>
+                          <td>
+                            <strong>{registration.student_name}</strong>
+                            <small className="cell-subtitle">{registration.student_id}</small>
+                          </td>
                           <td><strong>{registration.vehicle.plate_number}</strong></td>
                           <td>{registration.vehicle.vehicle_type}</td>
                           <td className="amount-cell">{formatCurrency(registration.monthly_price)}</td>
@@ -1365,24 +1423,17 @@ function App() {
                     {eventSubmitting ? 'Đang ghi nhận...' : 'Ghi nhận lượt xe'}
                   </button>
                 </form>
-                <p className="report-note">
-                  Backend tự áp dụng chính sách: hai lượt đầu mỗi ngày trên một
-                  xe miễn phí; từ lượt thứ ba thu 3.000 đồng/lượt. Thời điểm phải
-                  thuộc tháng đăng ký.
-                </p>
               </article>
             )}
 
-            <div className="report-not-available">
-              <strong>Phạm vi dữ liệu xe</strong>
-              <p>
-                Theo SRS, chỉ lưu xe có đăng ký vé tháng. Xe không đăng ký vé
-                tháng và lịch sử gửi/lấy chi tiết chưa có endpoint lưu hoặc tra
-                cứu trong backend; giao diện chỉ thông báo kết quả của lượt vừa
-                ghi nhận.
-              </p>
-            </div>
           </section>
+        )}
+        {page === 'students' && <StudentsPage />}
+        {page === 'rooms' && <RoomsPage />}
+        {page === 'visitors' && <VisitorsPage />}
+        {page === 'accounts' && <AccountsPage user={user} />}
+        {page === 'profile' && (
+          <ProfilePage user={user} onUserUpdated={onUserUpdated} />
         )}
       </main>
     </div>

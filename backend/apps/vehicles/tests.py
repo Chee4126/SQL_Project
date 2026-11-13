@@ -1,16 +1,17 @@
-from datetime import datetime
 from decimal import Decimal
 
-from django.utils import timezone
+from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
 from apps.students.models import Student
 from apps.vehicles.models import MonthlyVehicleRegistration, Vehicle, VehicleEvent
 
 
-# Kiểm tra đăng ký vé tháng, tra cứu xe và phí sự kiện gửi/lấy.
+# Kiểm tra đăng ký vé tháng, tra cứu xe và ghi nhận lượt gửi/lấy.
 class VehicleApiTests(APITestCase):
     def setUp(self):
+        user = get_user_model().objects.create_user(username="staff", password="test-pass")
+        self.client.force_authenticate(user=user)
         self.student = Student.objects.create(student_id="SV001", name="Nguyen An")
 
     def register(self, plate, month=11, year=2026, student_id=None, vehicle_type="Xe máy"):
@@ -60,14 +61,14 @@ class VehicleApiTests(APITestCase):
 
         self.assertEqual(registrations.status_code, 200)
         self.assertEqual(len(registrations.data), 1)
+        self.assertEqual(registrations.data[0]["student_name"], self.student.name)
         self.assertEqual(vehicles.status_code, 200)
         self.assertEqual(vehicles.data[0]["plate_number"], "51A-22222")
 
-    def test_first_two_daily_events_are_free_and_third_is_charged(self):
+    def test_vehicle_events_are_recorded_without_fee_policy(self):
         registration_response = self.register("51A-33333")
         registration_id = registration_response.data["id"]
         event_url = f"/api/monthly-vehicle-registrations/{registration_id}/events"
-        fees = []
         for event_type in ["GUI", "LAY", "GUI"]:
             response = self.client.post(
                 event_url,
@@ -78,49 +79,14 @@ class VehicleApiTests(APITestCase):
                 format="json",
             )
             self.assertEqual(response.status_code, 201)
-            fees.append((response.data["is_free"], Decimal(response.data["fee"])))
+            self.assertNotIn("is_free", response.data)
+            self.assertNotIn("fee", response.data)
 
+        self.assertEqual(VehicleEvent.objects.count(), 3)
         self.assertEqual(
-            fees,
-            [
-                (True, Decimal("0.00")),
-                (True, Decimal("0.00")),
-                (False, Decimal("3000.00")),
-            ],
+            VehicleEvent.objects.filter(is_free__isnull=True, fee__isnull=True).count(),
+            3,
         )
-
-    def test_event_fee_counter_resets_next_local_day(self):
-        registration = MonthlyVehicleRegistration.objects.create(
-            student=self.student,
-            vehicle=Vehicle.objects.create(
-                plate_number="51A-44444",
-                vehicle_type="Xe máy",
-            ),
-            month=11,
-            year=2026,
-        )
-        previous_day = timezone.make_aware(datetime(2026, 11, 6, 23, 55))
-        VehicleEvent.objects.create(
-            registration=registration,
-            event_at=previous_day,
-            event_type=VehicleEvent.EventType.PARK,
-            is_free=True,
-            fee=Decimal("0.00"),
-        )
-        next_day_event = timezone.make_aware(datetime(2026, 11, 7, 0, 5))
-
-        response = self.client.post(
-            f"/api/monthly-vehicle-registrations/{registration.pk}/events",
-            {
-                "event_at": next_day_event.isoformat(),
-                "event_type": "LAY",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 201)
-        self.assertTrue(response.data["is_free"])
-        self.assertEqual(Decimal(response.data["fee"]), Decimal("0.00"))
 
     def test_event_rejects_invalid_type_and_unknown_registration(self):
         registration_response = self.register("51A-55555")
@@ -137,9 +103,15 @@ class VehicleApiTests(APITestCase):
             {"event_at": "2026-11-06T09:00:00+07:00", "event_type": "GUI"},
             format="json",
         )
+        outside_registration_period = self.client.post(
+            event_url,
+            {"event_at": "2026-12-01T00:00:00+07:00", "event_type": "GUI"},
+            format="json",
+        )
 
         self.assertEqual(invalid_event.status_code, 400)
         self.assertEqual(missing_registration.status_code, 400)
+        self.assertEqual(outside_registration_period.status_code, 400)
 
     def test_registration_limit_report_flags_students_over_limit(self):
         other_student = Student.objects.create(student_id="SV002", name="Tran Binh")
@@ -169,6 +141,7 @@ class VehicleApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data[0]["student_id"], self.student.pk)
+        self.assertEqual(response.data[0]["student_name"], self.student.name)
         self.assertTrue(response.data[0]["within_limit"])
         self.assertEqual(response.data[1]["student_id"], other_student.pk)
         self.assertEqual(response.data[1]["registration_count"], 3)

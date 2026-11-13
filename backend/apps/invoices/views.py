@@ -1,7 +1,8 @@
+from datetime import date
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import DecimalField, F, Sum
+from django.db.models import DecimalField, F, Q, Sum
 from rest_framework import generics, serializers, status
 from rest_framework.exceptions import APIException
 from rest_framework.response import Response
@@ -13,9 +14,10 @@ from apps.invoices.serializers import (
     InvoiceSerializer,
     InvoiceStatusSerializer,
 )
+from apps.rooms.models import RoomAssignment
 from apps.students.models import Student
 from apps.services.models import ServiceUsage
-from apps.vehicles.models import MonthlyVehicleRegistration, VehicleEvent
+from apps.vehicles.models import MonthlyVehicleRegistration
 
 
 class InvoiceConflict(APIException):
@@ -24,8 +26,7 @@ class InvoiceConflict(APIException):
     default_code = "invoice_conflict"
 
 
-# Tạo hóa đơn từ các giao dịch đã lưu; tiền phòng được nhập thủ công vì
-# mô hình phân phòng và đơn giá phòng hiện chưa có trong dự án.
+# Tạo hóa đơn từ các giao dịch đã lưu; tiền phòng hiện vẫn nhập thủ công.
 class InvoiceGenerateView(APIView):
     def post(self, request):
         request_serializer = InvoiceGenerationSerializer(data=request.data)
@@ -70,7 +71,7 @@ class InvoiceGenerateView(APIView):
                     )
                 )["total"] or Decimal("0.00")
 
-                # Cộng vé tháng và phí sự kiện của xe đăng ký trong kỳ.
+                # Cộng tiền vé tháng; các lượt gửi/lấy không còn phát sinh phí.
                 registrations = MonthlyVehicleRegistration.objects.filter(
                     student=student,
                     month=month,
@@ -79,10 +80,6 @@ class InvoiceGenerateView(APIView):
                 vehicle_total = registrations.aggregate(
                     total=Sum("monthly_price")
                 )["total"] or Decimal("0.00")
-                parking_total = VehicleEvent.objects.filter(
-                    registration__in=registrations
-                ).aggregate(total=Sum("fee"))["total"] or Decimal("0.00")
-
                 # Nếu lập lại hóa đơn chưa thanh toán, giữ phí phòng cũ khi
                 # request không truyền giá mới.
                 room_total = values.get(
@@ -93,7 +90,7 @@ class InvoiceGenerateView(APIView):
                     "room_amount": room_total,
                     "service_amount": service_total,
                     "vehicle_amount": vehicle_total,
-                    "parking_amount": parking_total,
+                    "parking_amount": Decimal("0.00"),
                 }
                 total = sum(amounts.values(), Decimal("0.00"))
 
@@ -167,7 +164,7 @@ class InvoiceStatusUpdateView(generics.UpdateAPIView):
     http_method_names = ["patch", "options", "head"]
 
 
-# Báo cáo chi phí tháng theo sinh viên, lấy từ hóa đơn đã lập và sắp xếp tên.
+# Báo cáo chi phí theo sinh viên nội trú trong tháng, không phụ thuộc hóa đơn.
 class MonthlyStudentCostReportView(APIView):
     def get(self, request):
         month = self._parse_period_value(request.query_params.get("month"), "month")
@@ -179,26 +176,77 @@ class MonthlyStudentCostReportView(APIView):
         if not 1 <= year <= 9999:
             raise serializers.ValidationError({"year": "Năm không hợp lệ."})
 
-        # Hóa đơn là nguồn dữ liệu tổng hợp sẵn; chưa có bảng phân phòng để
-        # xác nhận sinh viên còn đang ở KTX trong kỳ.
-        invoices = (
-            Invoice.objects.filter(month=month, year=year)
-            .select_related("student")
-            .order_by("student__name", "student_id")
+        period_start = date(year, month, 1)
+        period_end = (
+            date(year + 1, 1, 1)
+            if month == 12 and year < 9999
+            else date(year, month + 1, 1)
+            if month < 12
+            else None
         )
+
+        costs = {}
+        assignments = RoomAssignment.objects.all()
+        if period_end is not None:
+            assignments = assignments.filter(start_date__lt=period_end)
+        assignments = assignments.filter(
+            Q(end_date__isnull=True) | Q(end_date__gt=period_start)
+        ).select_related("student", "room")
+        for assignment in assignments:
+            student_id = assignment.student_id
+            if student_id not in costs:
+                costs[student_id] = {
+                    "student_id": student_id,
+                    "student_name": assignment.student.name,
+                    "room_amount": Decimal("0.00"),
+                    "service_amount": Decimal("0.00"),
+                    "vehicle_amount": Decimal("0.00"),
+                }
+            costs[student_id]["room_amount"] += assignment.room.monthly_price
+
+        service_totals = (
+            ServiceUsage.objects.filter(
+                used_at__year=year,
+                used_at__month=month,
+                student_id__in=costs,
+            )
+            .values("student_id")
+            .annotate(
+                total=Sum(
+                    F("quantity") * F("applied_price"),
+                    output_field=DecimalField(max_digits=24, decimal_places=2),
+                )
+            )
+        )
+        for row in service_totals:
+            costs[row["student_id"]]["service_amount"] = row["total"] or Decimal("0.00")
+
+        vehicle_totals = (
+            MonthlyVehicleRegistration.objects.filter(
+                month=month,
+                year=year,
+                student_id__in=costs,
+            )
+            .values("student_id")
+            .annotate(total=Sum("monthly_price"))
+        )
+        for row in vehicle_totals:
+            costs[row["student_id"]]["vehicle_amount"] = (
+                row["total"] or Decimal("0.00")
+            )
+
+        students = Student.objects.filter(pk__in=costs).order_by("name", "student_id")
         return Response(
             [
                 {
-                    "student_id": invoice.student_id,
-                    "student_name": invoice.student.name,
-                    "room_amount": invoice.room_amount,
-                    "service_amount": invoice.service_amount,
-                    "vehicle_amount": invoice.vehicle_amount,
-                    "parking_amount": invoice.parking_amount,
-                    "total_amount": invoice.total_amount,
-                    "status": invoice.status,
+                    **costs[student.pk],
+                    "total_amount": (
+                        costs[student.pk]["room_amount"]
+                        + costs[student.pk]["service_amount"]
+                        + costs[student.pk]["vehicle_amount"]
+                    ),
                 }
-                for invoice in invoices
+                for student in students
             ]
         )
 

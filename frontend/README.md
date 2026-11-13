@@ -4,6 +4,10 @@ Giao diện React + Vite.
 
 ## Chức năng hiện có
 
+- **Tài khoản:** Staff đăng ký bằng họ tên, email, số điện thoại và mật khẩu;
+  đăng nhập bằng email. Mọi tài khoản có cùng vai trò Staff, có thể sửa hồ sơ,
+  đổi mật khẩu và quản lý danh sách tài khoản. Hệ thống không phân cấp
+  quyền giữa các tài khoản.
 - **Dịch vụ:** xem danh mục, thêm/cập nhật tên, đơn giá và đơn vị; ghi nhận
   mức sử dụng theo mã sinh viên; tra cứu tổng hợp sử dụng theo khoảng ngày.
   Backend chốt đơn giá tại thời điểm ghi nhận nên cập nhật giá không đổi lịch
@@ -13,9 +17,10 @@ Giao diện React + Vite.
   xe mỗi sinh viên/kỳ, miễn phí hai lượt đầu mỗi ngày và tính 3.000 đồng cho
   mỗi lượt tiếp theo.
 
-Giao diện nhận mã sinh viên do người quản lý nhập vì backend hiện chưa có API
-tra cứu danh sách sinh viên. Backend vẫn kiểm tra mã sinh viên và các giới hạn
-nghiệp vụ khi lưu. API hiện chưa cung cấp danh sách lịch sử lượt xe hoặc danh
+Các chức năng phân phòng, ghi nhận khách thăm, sử dụng dịch vụ, đăng ký xe
+và lập hóa đơn chọn sinh viên từ danh sách hồ sơ đã tạo; mã và họ tên được lấy
+từ API sinh viên. Backend vẫn xác thực mã sinh viên và các giới hạn nghiệp vụ
+khi lưu. API hiện chưa cung cấp danh sách lịch sử lượt xe hoặc danh
 sách từng giao dịch dịch vụ; giao diện chỉ hiển thị kết quả vừa ghi nhận và
 báo cáo tổng hợp theo nhóm.
 
