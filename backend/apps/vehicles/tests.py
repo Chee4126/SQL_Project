@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
+from apps.invoices.models import Invoice
 from apps.students.models import Student
 from apps.vehicles.models import MonthlyVehicleRegistration, Vehicle, VehicleEvent
 
@@ -35,6 +36,13 @@ class VehicleApiTests(APITestCase):
         self.assertTrue(
             Vehicle.objects.filter(plate_number="51A-12345", vehicle_type="Xe máy").exists()
         )
+        invoice = Invoice.objects.get(
+            student=self.student,
+            month=11,
+            year=2026,
+        )
+        self.assertEqual(invoice.vehicle_amount, Decimal("100000.00"))
+        self.assertEqual(invoice.total_amount, Decimal("100000.00"))
 
     def test_student_cannot_register_more_than_two_vehicles_per_month(self):
         self.assertEqual(self.register("51A-00001").status_code, 201)

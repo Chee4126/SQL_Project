@@ -16,6 +16,12 @@ Giao diện React + Vite.
   nhận lượt gửi/lấy. Backend áp dụng mức 100.000 đồng/xe/tháng, giới hạn hai
   xe mỗi sinh viên/kỳ, miễn phí hai lượt đầu mỗi ngày và tính 3.000 đồng cho
   mỗi lượt tiếp theo.
+- **Báo cáo chi phí tháng:** tổng hợp tiền phòng, dịch vụ và vé xe của sinh
+  viên nội trú theo tháng; có thể in toàn bộ danh sách hoặc phiếu riêng cho
+  một sinh viên.
+- **Hóa đơn:** tự tạo/cập nhật hóa đơn chưa thanh toán khi phân phòng, ghi
+  nhận dịch vụ hoặc đăng ký vé tháng; xem chi tiết từng dịch vụ trong các
+  khoản thu.
 
 Các chức năng phân phòng, ghi nhận khách thăm, sử dụng dịch vụ, đăng ký xe
 và lập hóa đơn chọn sinh viên từ danh sách hồ sơ đã tạo; mã và họ tên được lấy

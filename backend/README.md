@@ -56,9 +56,12 @@ python manage.py test
 
 ## Hóa đơn
 
-`POST /api/invoices/generate` lập hoặc cập nhật hóa đơn chưa thanh toán cho
-một sinh viên trong tháng/năm. Backend tự cộng dịch vụ theo đơn giá lúc sử
-dụng và vé tháng; lượt gửi/lấy xe không phát sinh phí. Ví dụ:
+Khi phân phòng, ghi nhận sử dụng dịch vụ hoặc đăng ký vé tháng, Backend tự
+tạo/cập nhật hóa đơn chưa thanh toán của sinh viên trong kỳ tương ứng. Tiền
+phòng lấy theo giá tháng của các lượt phân phòng giao với tháng; dịch vụ
+dùng đơn giá tại thời điểm ghi nhận; xe lấy giá vé tháng. Lượt gửi/lấy xe
+không phát sinh phí. `POST /api/invoices/generate` cũng có thể được dùng
+để lập hoặc cập nhật hóa đơn thủ công. Ví dụ:
 
 ```json
 {
@@ -69,11 +72,13 @@ dụng và vé tháng; lượt gửi/lấy xe không phát sinh phí. Ví dụ:
 }
 ```
 
-`room_amount` là khoản tiền phòng bắt buộc do quản lý nhập lần đầu vì dự án
-chưa tự tính tiền từ lịch sử phân phòng. Đơn giá và sức chứa được cấu hình
-trên từng phòng, nhưng chưa tự tổng hợp vào hóa đơn. Có thể bỏ qua trường
-này khi lập lại hóa đơn chưa thanh toán để giữ giá trị đã nhập. Hóa đơn đã
-thanh toán không thể lập lại.
+`room_amount` bắt buộc khi lập thủ công hóa đơn mới; nếu bỏ trống lúc cập
+nhật hóa đơn thì giữ khoản tiền phòng hiện tại. Các API hóa đơn trả
+`service_lines` gồm tên dịch vụ, số lượng, đơn vị, đơn giá đã áp dụng và
+thành tiền; các dòng được lưu theo hóa đơn để giữ nguyên chi tiết tại thời
+điểm lập. Khi lập lại hóa đơn chưa thanh toán, các dòng được tính mới từ
+giao dịch dịch vụ trong kỳ. Không thể ghi thêm khoản thu vào kỳ đã có hóa
+đơn thanh toán.
 
 ## Phòng
 

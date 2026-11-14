@@ -68,15 +68,103 @@ class InvoiceApiTests(APITestCase):
         self.assertEqual(Decimal(response.data["parking_amount"]), Decimal("0.00"))
         self.assertEqual(Decimal(response.data["total_amount"]), Decimal("630000.00"))
         self.assertEqual(response.data["status"], Invoice.PaymentStatus.UNPAID)
+        self.assertEqual(len(response.data["service_lines"]), 1)
+        service_line = response.data["service_lines"][0]
+        self.assertEqual(service_line["service_id"], service.pk)
+        self.assertEqual(service_line["service_name"], "Giặt là")
+        self.assertEqual(service_line["unit"], "kg")
+        self.assertEqual(service_line["quantity"], 2)
+        self.assertEqual(Decimal(service_line["applied_price"]), Decimal("15000.00"))
+        self.assertEqual(Decimal(service_line["amount"]), Decimal("30000.00"))
+
+    def test_room_service_and_vehicle_registrations_update_one_invoice(self):
+        room = Room.objects.create(
+            room_id="P110",
+            name="Phòng 110",
+            monthly_price=Decimal("1800000.00"),
+            max_occupants=4,
+        )
+        assignment = self.client.post(
+            "/api/room-assignments",
+            {
+                "student_id": self.student.pk,
+                "room_id": room.pk,
+                "start_date": "2026-11-06",
+            },
+            format="json",
+        )
+        service = Service.objects.create(
+            name="Giặt là",
+            price=Decimal("15000.00"),
+            unit="kg",
+        )
+        usage = self.client.post(
+            "/api/service-usages",
+            {
+                "student_id": self.student.pk,
+                "service_id": service.pk,
+                "used_at": "2026-11-07T09:00:00Z",
+                "quantity": 2,
+            },
+            format="json",
+        )
+        registration = self.client.post(
+            "/api/monthly-vehicle-registrations",
+            {
+                "student_id": self.student.pk,
+                "plate_number": "51A-11000",
+                "vehicle_type": "Xe máy",
+                "month": 11,
+                "year": 2026,
+            },
+            format="json",
+        )
+
+        self.assertEqual(assignment.status_code, 201, assignment.data)
+        self.assertEqual(usage.status_code, 201, usage.data)
+        self.assertEqual(registration.status_code, 201, registration.data)
+        invoice = Invoice.objects.get(
+            student=self.student,
+            month=11,
+            year=2026,
+        )
+        self.assertEqual(invoice.room_amount, Decimal("1800000.00"))
+        self.assertEqual(invoice.service_amount, Decimal("30000.00"))
+        self.assertEqual(invoice.vehicle_amount, Decimal("100000.00"))
+        self.assertEqual(invoice.total_amount, Decimal("1930000.00"))
+        self.assertEqual(invoice.service_lines.get().amount, Decimal("30000.00"))
+        self.assertEqual(Invoice.objects.count(), 1)
 
     def test_regeneration_updates_unpaid_invoice_and_keeps_room_amount(self):
+        service = Service.objects.create(
+            name="Giặt là",
+            price=Decimal("15000.00"),
+            unit="kg",
+        )
+        ServiceUsage.objects.create(
+            student=self.student,
+            service=service,
+            used_at=datetime(2026, 11, 6, 9, tzinfo=timezone.utc),
+            quantity=2,
+            applied_price=Decimal("15000.00"),
+        )
         first = self.generate()
+        ServiceUsage.objects.create(
+            student=self.student,
+            service=service,
+            used_at=datetime(2026, 11, 7, 9, tzinfo=timezone.utc),
+            quantity=1,
+            applied_price=Decimal("15000.00"),
+        )
         second = self.generate()
 
         self.assertEqual(first.status_code, 201)
         self.assertEqual(second.status_code, 200)
         self.assertEqual(first.data["id"], second.data["id"])
         self.assertEqual(Decimal(second.data["room_amount"]), Decimal("500000.00"))
+        self.assertEqual(first.data["service_lines"][0]["quantity"], 2)
+        self.assertEqual(second.data["service_lines"][0]["quantity"], 3)
+        self.assertEqual(Decimal(second.data["service_lines"][0]["amount"]), Decimal("45000.00"))
         self.assertEqual(Invoice.objects.count(), 1)
 
     def test_paid_invoice_cannot_be_regenerated(self):
@@ -151,6 +239,12 @@ class InvoiceApiTests(APITestCase):
             student=self.student,
             room=first_room,
             start_date=date(2026, 11, 6),
+        )
+        RoomAssignment.objects.create(
+            student=self.student,
+            room=first_room,
+            start_date=date(2026, 11, 6),
+            end_date=date(2026, 11, 6),
         )
         RoomAssignment.objects.create(
             student=second_student,

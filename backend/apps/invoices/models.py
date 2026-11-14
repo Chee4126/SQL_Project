@@ -1,5 +1,6 @@
 from django.db import models
 
+from apps.services.models import Service
 from apps.students.models import Student
 
 
@@ -93,3 +94,57 @@ class Invoice(models.Model):
 
     def __str__(self):
         return f"{self.student_id} - {self.month:02d}/{self.year}"
+
+
+class InvoiceServiceLine(models.Model):
+    id = models.AutoField(primary_key=True, db_column="MaCTHD")
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.CASCADE,
+        related_name="service_lines",
+        db_column="MaHD",
+    )
+    service = models.ForeignKey(
+        Service,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="invoice_lines",
+        db_column="MaDV",
+    )
+    service_name = models.CharField(max_length=100, db_column="TenDV")
+    unit = models.CharField(max_length=30, blank=True, db_column="DonViTinh")
+    quantity = models.PositiveIntegerField(db_column="SoLuong")
+    applied_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        db_column="DonGiaApDung",
+    )
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        db_column="ThanhTien",
+    )
+
+    class Meta:
+        db_table = "CHITIETHOADON"
+        ordering = ["service_name", "applied_price", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(quantity__gt=0),
+                name="invoice_service_line_quantity_positive",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(applied_price__gte=0)
+                    & models.Q(amount__gte=0)
+                ),
+                name="invoice_service_line_amounts_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    amount=models.F("quantity") * models.F("applied_price")
+                ),
+                name="invoice_service_line_total_matches",
+            ),
+        ]

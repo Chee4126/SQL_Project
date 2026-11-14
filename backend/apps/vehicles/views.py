@@ -1,9 +1,11 @@
+from django.db import transaction
 from django.db.models import Count
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.invoices.services import refresh_invoice_for_period
 from apps.vehicles.models import MonthlyVehicleRegistration, Vehicle, VehicleEvent
 from apps.vehicles.serializers import (
     MonthlyVehicleRegistrationSerializer,
@@ -43,6 +45,16 @@ class VehicleListView(generics.ListAPIView):
 # Tra cứu đăng ký theo sinh viên, tháng và năm.
 class MonthlyVehicleRegistrationListCreateView(generics.ListCreateAPIView):
     serializer_class = MonthlyVehicleRegistrationSerializer
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        registration = serializer.save()
+        refresh_invoice_for_period(
+            student=registration.student,
+            month=registration.month,
+            year=registration.year,
+            use_assignment_room=True,
+        )
 
     def get_queryset(self):
         queryset = MonthlyVehicleRegistration.objects.select_related(

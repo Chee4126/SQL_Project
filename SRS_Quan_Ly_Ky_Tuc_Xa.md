@@ -1,7 +1,7 @@
 # ĐẶC TẢ YÊU CẦU PHẦN MỀM (SRS)
 # HỆ THỐNG QUẢN LÝ KÝ TÚC XÁ SINH VIÊN
 
-**Phiên bản:** 2.3 · **Ngày cập nhật:** 13/11/2026
+**Phiên bản:** 2.4 · **Ngày cập nhật:** 15/11/2026
 **Công nghệ:** React + Vite, Python, Django REST Framework, SQLite (mặc định) hoặc MySQL
 
 # 1. TỔNG QUAN HỆ THỐNG
@@ -98,6 +98,9 @@ hiện tại; tài khoản Staff dùng cho người vận hành hệ thống.
   không được ở đồng thời tại nhiều phòng.
 - Nếu sinh viên ở phòng ít nhất một ngày trong tháng thì tiền phòng
   được tính trọn tháng theo đơn giá phòng.
+- Khi phát sinh phân phòng, sử dụng dịch vụ hoặc đăng ký vé tháng, hệ
+  thống tự tạo hoặc cập nhật hóa đơn chưa thanh toán của sinh viên trong
+  kỳ tương ứng.
 - Một sinh viên có thể sử dụng một dịch vụ nhiều lần; tiền dịch vụ được
   cộng dồn theo tháng và theo giá tại thời điểm sử dụng.
 - Một sinh viên được đăng ký tối đa 2 xe vé tháng trong một tháng. Giá
@@ -106,6 +109,8 @@ hiện tại; tài khoản Staff dùng cho người vận hành hệ thống.
   một lượt phải thuộc kỳ đăng ký; lượt gửi/lấy không phát sinh phí.
 - Mỗi sinh viên có tối đa một hóa đơn trong một tháng/năm. Hóa đơn gồm
   tiền phòng, dịch vụ và vé tháng.
+- Hóa đơn đã thanh toán là dữ liệu chốt; không ghi nhận thêm khoản thu vào
+  cùng kỳ. Thao tác phát sinh khoản thu bị từ chối và không lưu giao dịch.
 - Các thay đổi có ảnh hưởng tới sức chứa phòng và số xe đăng ký phải
   được kiểm tra nhất quán ở Backend; không chỉ dựa vào giao diện.
 
@@ -126,19 +131,15 @@ Quản lý sinh viên và phòng
 
 ↓
 
-Ghi nhận khách thăm, dịch vụ và xe tháng
+Phân phòng, ghi nhận dịch vụ và đăng ký xe tháng
 
 ↓
 
-Tổng hợp tiền phòng và các khoản phí
+Tự tạo/cập nhật hóa đơn chưa thanh toán theo kỳ phát sinh
 
 ↓
 
-Lập hóa đơn tháng
-
-↓
-
-Tra cứu và lập báo cáo
+Tra cứu hóa đơn, cập nhật trạng thái và lập báo cáo
 
 ## 2.2. Nghiệp vụ quản lý sinh viên và phòng
 
@@ -161,6 +162,12 @@ sức chứa.
 Tiền phòng được tính trọn tháng nếu sinh viên ở phòng ít nhất một ngày
 trong tháng. Lịch sử phân phòng phải được giữ lại sau khi sinh viên
 chuyển phòng hoặc rời ký túc xá.
+
+Lượt phân phòng có ngày vào và ngày ra bằng nhau có thời lượng bằng 0,
+không được tính là thời gian ở và không phát sinh tiền phòng.
+Phân phòng mới tự tạo hoặc cập nhật hóa đơn chưa thanh toán của sinh viên
+cho tháng bắt đầu ở; khoản tiền phòng được tính theo đơn giá tháng của
+các lượt ở giao với tháng.
 
 Nhân viên có thể xóa hồ sơ sinh viên hoặc phòng chưa được dùng trong bất
 kỳ giao dịch nào. Nếu hồ sơ sinh viên đã có hóa đơn, lượt sử dụng dịch vụ,
@@ -197,8 +204,9 @@ tổng số lượng nhân với đơn giá áp dụng của từng lần sử d
 Đơn giá áp dụng được lưu cùng giao dịch để các lần sử dụng trước đó
 không bị thay đổi khi giá trong danh mục được cập nhật.
 Dịch vụ chỉ được xóa khi chưa có lượt sử dụng; các lượt sử dụng và đơn
-giá lịch sử phải được giữ nguyên. Chi phí không được cộng ngay vào hóa
-đơn khi ghi nhận sử dụng; được tổng hợp khi lập hóa đơn hoặc xem báo cáo.
+giá lịch sử phải được giữ nguyên. Khi ghi nhận sử dụng, hệ thống tự tạo
+hoặc cập nhật hóa đơn chưa thanh toán trong cùng kỳ; các lần dùng cùng
+một dịch vụ và đơn giá được gộp thành một dòng chi tiết hóa đơn.
 
 ## 2.5. Nghiệp vụ gửi/lấy xe
 
@@ -208,7 +216,8 @@ ký gồm xe, sinh viên, tháng/năm áp dụng và đơn giá vé tháng là 1
 
 Với xe có vé tháng, hệ thống lưu từng lượt gửi hoặc lấy trong đúng tháng
 đăng ký. Ghi nhận lượt xe chỉ lưu loại lượt và thời điểm, không tính phí
-và không làm thay đổi hóa đơn.
+và không làm thay đổi hóa đơn. Đăng ký vé tháng tự tạo hoặc cập nhật hóa
+đơn chưa thanh toán trong kỳ đăng ký, cộng giá vé vào khoản tiền xe.
 
 Xe không có vé tháng và các lượt tương ứng không được lưu trong cơ sở
 dữ liệu.
@@ -217,26 +226,33 @@ Xe vé tháng gắn với đăng ký và lịch sử lượt xe; hệ thống kh
 
 ## 2.6. Nghiệp vụ hóa đơn và báo cáo
 
-Hệ thống có hai chức năng riêng: lập hóa đơn theo từng sinh viên và báo
-cáo chi phí tháng cho sinh viên có lượt phân phòng giao với tháng được chọn.
+Hệ thống có hai chức năng riêng: hóa đơn theo từng sinh viên và báo cáo
+chi phí tháng cho sinh viên có lượt phân phòng giao với tháng được chọn.
 
-Khi lập hóa đơn, Staff chọn sinh viên, tháng/năm và nhập tiền phòng.
-Backend tổng hợp tiền dịch vụ từ các lần sử dụng và tiền vé tháng từ các
-đăng ký. Lượt gửi/lấy xe không phát sinh phí. Nếu chưa thanh toán, hóa
-đơn có thể lập lại để cập nhật dịch vụ/vé xe; nếu tiền phòng không được
-nhập lại thì giữ nguyên giá trị đã nhập. Hóa đơn đã thanh toán không thể
-lập lại.
+Khi phân phòng, ghi nhận sử dụng dịch vụ hoặc đăng ký vé tháng, Backend
+tự tạo hoặc cập nhật hóa đơn chưa thanh toán của sinh viên trong kỳ phát
+sinh. Tiền phòng tính theo các lượt ở có thời lượng lớn hơn 0 và giao với
+tháng; mỗi lượt ở tính trọn đơn giá tháng. Dịch vụ được tính theo đơn giá
+đã áp dụng tại thời điểm sử dụng; vé xe theo giá vé tháng. Lượt gửi/lấy xe
+không phát sinh phí. Staff vẫn có thể lập/cập nhật hóa đơn thủ công; khi
+lập mới theo cách này, tiền phòng phải được nhập. Nếu bỏ qua tiền phòng
+khi cập nhật hóa đơn chưa thanh toán thì giữ nguyên giá trị hiện tại.
+Hóa đơn đã thanh toán không thể cập nhật; thao tác ghi nhận khoản thu mới
+trong kỳ đã thanh toán bị từ chối cùng giao dịch.
 
 Mỗi sinh viên có tối đa một hóa đơn trong một tháng/năm. Hóa đơn lưu
-tiền phòng, tiền dịch vụ, tiền vé xe tháng, khoản phí gửi xe bằng 0 cho
-hóa đơn mới, tổng tiền và trạng thái thanh toán. Báo cáo chi phí tháng
-được tổng hợp trực tiếp từ lượt phân phòng, sử dụng dịch vụ và đăng ký
-vé tháng; không yêu cầu hóa đơn đã được lập. Báo cáo chỉ liệt kê sinh
-viên có lượt phân phòng giao với tháng được chọn; tiền phòng tính trọn
-tháng theo đơn giá phòng nếu ở ít nhất một ngày. Nếu sinh viên chuyển
-phòng trong tháng, báo cáo cộng tiền tháng của từng lượt phân phòng giao
-với kỳ theo đơn giá của phòng tương ứng. Có thể chọn tháng/năm, xem danh
-sách theo tên và in toàn danh sách.
+tiền phòng, tiền dịch vụ, tiền vé xe tháng, phí gửi xe (bằng 0 với hóa đơn
+mới), tổng tiền và trạng thái thanh toán. Hóa đơn cũng lưu các dòng chi tiết
+dịch vụ gồm tên, đơn vị, số lượng, đơn giá áp dụng và thành tiền; các lần
+dùng cùng dịch vụ nhưng khác đơn giá được lưu thành các dòng riêng.
+
+Báo cáo chi phí tháng được tổng hợp trực tiếp từ lượt phân phòng, sử dụng
+dịch vụ và đăng ký vé tháng; không yêu cầu hóa đơn đã được lập. Báo cáo
+chỉ liệt kê sinh viên có lượt phân phòng giao với tháng được chọn; lượt ở
+có thời lượng lớn hơn 0 được tính trọn tháng theo đơn giá phòng. Nếu sinh
+viên chuyển phòng trong tháng, báo cáo cộng tiền tháng của từng lượt ở có
+thời lượng lớn hơn 0 theo đơn giá phòng tương ứng. Có thể chọn tháng/năm,
+xem danh sách theo tên và in toàn danh sách hoặc phiếu riêng cho từng sinh viên.
 
 Các báo cáo cần hỗ trợ tra cứu theo tháng, khoảng ngày hoặc tuần/tháng
 tùy nghiệp vụ; chi tiết được mô tả tại Mục 4 và Mục 6.
@@ -292,7 +308,7 @@ giao dịch, hóa đơn hay lịch sử để cho phép xóa danh mục.
 | 4 | Ghi nhận lượt thăm | Nhập thông tin khách trực tiếp, ghi nhận đến/rời đi, xem lịch sử và thống kê khách theo tuần/tháng; không có danh mục khách riêng. |
 | 5 | Quản lý dịch vụ | Thêm, xem, sửa, xóa dịch vụ chưa được sử dụng; ghi nhận sử dụng và xem báo cáo sử dụng/doanh thu. |
 | 6 | Quản lý xe tháng | Đăng ký tối đa 2 xe mỗi sinh viên trong tháng, ghi nhận lượt gửi/lấy xe trong kỳ; không xóa xe/đăng ký/lịch sử. |
-| 7 | Hóa đơn và báo cáo | Lập/cập nhật hóa đơn chưa thanh toán, đổi trạng thái thanh toán; xem chi phí tháng, dịch vụ, doanh thu, giới hạn xe và sức chứa phòng. |
+| 7 | Hóa đơn và báo cáo | Tự tạo/cập nhật hóa đơn khi phát sinh khoản tiền, quản lý trạng thái thanh toán; xem/in chi phí tháng, dịch vụ, doanh thu, giới hạn xe và sức chứa phòng. |
 | 8 | Hồ sơ tài khoản | Người dùng cập nhật họ tên, email, số điện thoại và đổi mật khẩu của chính mình. |
 | 9 | Quản lý tài khoản | Staff đã đăng nhập tạo, xem và xóa tài khoản Staff khác; không thể xóa tài khoản đang đăng nhập hoặc đổi vai trò. |
 
@@ -412,6 +428,10 @@ Lưu lịch sử phân phòng
 
 ↓
 
+Tự tạo/cập nhật hóa đơn chưa thanh toán trong tháng bắt đầu ở
+
+↓
+
 Trả kết quả cho Frontend
 
 Nếu sinh viên rời hoặc chuyển phòng, hệ thống cập nhật ngày kết thúc
@@ -435,7 +455,7 @@ Lưu lần sử dụng cùng đơn giá áp dụng
 
 ↓
 
-Đưa giao dịch vào dữ liệu để tổng hợp khi lập hóa đơn hoặc xem báo cáo
+Tự tạo/cập nhật hóa đơn chưa thanh toán trong kỳ; trả kết quả cho Frontend
 
 ## 4.6. Luồng ghi nhận lượt gửi/lấy xe
 
@@ -449,29 +469,32 @@ Backend kiểm tra thời điểm thuộc tháng đăng ký
 
 Lưu lượt gửi/lấy; không tính hoặc cộng phí vào hóa đơn
 
-## 4.7. Luồng lập hóa đơn tháng
+## 4.7. Luồng tự động cập nhật hóa đơn tháng
 
-Chọn một sinh viên và tháng/năm cần lập hóa đơn
-
-↓
-
-Nhập tiền phòng (bắt buộc khi lập hóa đơn lần đầu)
+Phân phòng, ghi nhận sử dụng dịch vụ hoặc đăng ký vé tháng
 
 ↓
 
-Backend cộng tiền dịch vụ và vé tháng từ dữ liệu của kỳ
+Backend xác định sinh viên và tháng/năm phát sinh
 
 ↓
 
-Kiểm tra hóa đơn của sinh viên trong kỳ đã tồn tại và trạng thái thanh toán
+Tính tiền phòng từ lượt ở, dịch vụ theo đơn giá đã áp dụng và vé xe tháng
 
 ↓
 
-Tạo mới hoặc cập nhật hóa đơn chưa thanh toán; không lập lại hóa đơn đã thanh toán
+Tạo mới hoặc cập nhật hóa đơn chưa thanh toán, cùng các dòng dịch vụ chi tiết
 
 ↓
 
-Trả hóa đơn; danh sách hóa đơn được tra cứu riêng theo tháng, năm, sinh viên hoặc trạng thái
+Nếu hóa đơn của kỳ đã thanh toán, từ chối yêu cầu và hoàn tác giao dịch phát sinh
+
+↓
+
+Trả hóa đơn; có thể tra cứu theo tháng, năm, sinh viên hoặc trạng thái
+
+Staff vẫn có thể chủ động lập/cập nhật hóa đơn; khi tạo thủ công lần đầu,
+Staff phải nhập tiền phòng.
 
 ## 4.8. Luồng đăng ký, đăng nhập và cập nhật hồ sơ
 
@@ -697,10 +720,34 @@ Ràng buộc: `UNIQUE (MaSV, Thang, Nam)`.
 
 `TongTien` bằng tổng `TienPhong`, `TienDichVu`, `TienXe` và
 `PhiGuiXe`. Hóa đơn mới không tính phí lượt gửi/lấy; giá trị trong hóa
-đơn cũ được giữ nguyên như lịch sử. Khi lập hóa đơn, tiền phòng do Staff
-nhập (bắt buộc khi tạo mới); Backend tự tổng hợp dịch vụ và vé xe.
-Riêng báo cáo chi phí tháng tính tiền phòng trọn tháng theo từng lượt
-phân phòng giao với tháng nếu sinh viên ở ít nhất một ngày.
+đơn cũ được giữ nguyên như lịch sử. Khi phân phòng, ghi nhận sử dụng dịch
+vụ hoặc đăng ký vé tháng, Backend tự tạo/cập nhật hóa đơn chưa thanh toán
+trong kỳ phát sinh. Tiền phòng được tính theo các lượt phân phòng có thời
+lượng lớn hơn 0 và giao với tháng; mỗi lượt ở tính trọn tháng theo đơn giá.
+Lập hóa đơn thủ công vẫn được hỗ trợ; khi tạo hóa đơn mới theo cách này,
+Staff phải nhập tiền phòng. Nếu bỏ qua khi cập nhật, khoản tiền phòng hiện
+tại được giữ nguyên. Hóa đơn trả kèm chi tiết từng dịch vụ đã tính.
+
+## 5.13.1. Bảng CHITIETHOADON
+
+Bảng lưu các dòng dịch vụ đã được tính vào hóa đơn. Mỗi dòng chốt tên dịch
+vụ, đơn vị, số lượng, đơn giá áp dụng và thành tiền; thay đổi danh mục dịch
+vụ sau đó không làm thay đổi nội dung hóa đơn.
+
+| Trường | Ý nghĩa | Kiểu dữ liệu | Ràng buộc |
+|---|---|---|---|
+| MaCTHD | Mã dòng hóa đơn | INT | PK, AUTO_INCREMENT |
+| MaHD | Hóa đơn | INT | FK → HOADON.MaHD, xóa dây chuyền |
+| MaDV | Dịch vụ gốc | INT | FK → DICHVU.MaDV, NULL nếu dịch vụ bị xóa |
+| TenDV | Tên dịch vụ tại thời điểm lập | VARCHAR(100) | NN |
+| DonViTinh | Đơn vị tại thời điểm lập | VARCHAR(30) | NN |
+| SoLuong | Tổng số lượng tính theo đơn giá | INT | NN, lớn hơn 0 |
+| DonGiaApDung | Đơn giá tại thời điểm sử dụng | DECIMAL(12,2) | NN, không âm |
+| ThanhTien | Thành tiền dòng | DECIMAL(12,2) | NN, bằng `SoLuong * DonGiaApDung` |
+
+Các lần sử dụng cùng dịch vụ và cùng đơn giá được gộp thành một dòng. Nếu
+đơn giá áp dụng khác nhau trong cùng kỳ, hóa đơn giữ một dòng riêng cho
+mỗi đơn giá.
 
 ## 5.14. Ràng buộc toàn vẹn dữ liệu
 
@@ -713,11 +760,12 @@ phân phòng giao với tháng nếu sinh viên ở ít nhất một ngày.
 | Tham chiếu sinh viên | Phân phòng, khách thăm, sử dụng dịch vụ, đăng ký xe và lập hóa đơn phải chọn sinh viên đã có trong danh sách hồ sơ; hệ thống lưu mã sinh viên làm khóa liên kết. |
 | Mật khẩu | Mật khẩu được băm; đổi mật khẩu yêu cầu xác minh mật khẩu hiện tại và xác nhận mật khẩu mới. |
 | Sức chứa phòng | Mỗi lượt phân phòng làm tăng số người ở của phòng tại khoảng thời gian tương ứng; không cho phép vượt sức chứa. Phòng đủ chỗ bị loại khỏi lựa chọn phân phòng. |
-| Thời gian phân phòng | Ngày kết thúc không được trước ngày bắt đầu; sinh viên không có hai lượt ở trùng thời gian. |
+| Thời gian phân phòng | Ngày kết thúc không được trước ngày bắt đầu; khoảng ở là [ngày vào, ngày ra), lượt có thời lượng bằng 0 không phát sinh tiền phòng. |
 | Số lượng dịch vụ | `SoLuong` phải lớn hơn 0; đơn giá và các khoản tiền không âm. |
 | Giới hạn đăng ký xe | Tối đa 2 xe vé tháng cho mỗi sinh viên trong một tháng/năm. |
 | Đăng ký xe duy nhất | Một xe chỉ thuộc một đăng ký trong cùng tháng/năm. |
-| Hóa đơn tháng | Mỗi sinh viên chỉ có một hóa đơn trong một tháng/năm; tổng tiền bằng tổng các khoản thành phần. |
+| Hóa đơn tháng | Mỗi sinh viên chỉ có một hóa đơn trong một tháng/năm; tổng tiền bằng tổng các khoản thành phần; hóa đơn đã thanh toán không nhận thêm khoản thu trong kỳ. |
+| Chi tiết dịch vụ hóa đơn | Dòng dịch vụ lưu đơn giá áp dụng, số lượng và thành tiền; tổng các dòng bằng tiền dịch vụ của hóa đơn. |
 
 Các kiểm tra cần đếm dữ liệu hiện có như sức chứa phòng và số xe đăng ký
 phải được bảo vệ bằng transaction phù hợp. Ràng
@@ -738,6 +786,8 @@ khi hệ quản trị hỗ trợ.
 | XE | 1-N | DANGKYVEXE | DANGKYVEXE.BienSo |
 | DANGKYVEXE | 1-N | LUOTGUIXE | LUOTGUIXE.MaDangKy |
 | SINHVIEN | 1-N | HOADON | HOADON.MaSV |
+| HOADON | 1-N | CHITIETHOADON | CHITIETHOADON.MaHD |
+| DICHVU | 1-N | CHITIETHOADON | CHITIETHOADON.MaDV |
 | TAIKHOAN | 1-1 | HOSOTAIKHOAN | HOSOTAIKHOAN.MaTaiKhoan |
 
 ## 5.16. Bảng TAIKHOAN và HOSOTAIKHOAN
@@ -828,7 +878,7 @@ tên đăng nhập không được cập nhật qua API hồ sơ.
 | PUT/PATCH | `/api/rooms/{room_id}` | Cập nhật thông tin phòng |
 | DELETE | `/api/rooms/{room_id}` | Xóa phòng nếu chưa có lịch sử phân phòng |
 | GET | `/api/room-assignments` | Liệt kê lượt phân phòng; có thể lọc theo sinh viên, phòng và lượt còn hiệu lực |
-| POST | `/api/room-assignments` | Phân phòng cho sinh viên |
+| POST | `/api/room-assignments` | Phân phòng cho sinh viên; tự tạo/cập nhật hóa đơn chưa thanh toán của tháng bắt đầu ở |
 | PATCH | `/api/room-assignments/{id}/end` | Ghi nhận ngày rời phòng |
 | GET | `/api/students/{student_id}/room-history` | Xem lịch sử phân phòng |
 | GET | `/api/reports/room-capacity` | Thống kê số người ở, sức chứa và số chỗ còn lại theo ngày |
@@ -855,7 +905,7 @@ ghi nhận thời điểm hiện tại.
 | GET | `/api/services/{id}` | Xem dịch vụ |
 | PUT/PATCH | `/api/services/{id}` | Cập nhật dịch vụ và đơn giá |
 | DELETE | `/api/services/{id}` | Xóa dịch vụ nếu chưa có lượt sử dụng |
-| POST | `/api/service-usages` | Ghi nhận lần sử dụng dịch vụ |
+| POST | `/api/service-usages` | Ghi nhận lần sử dụng dịch vụ; tự tạo/cập nhật hóa đơn chưa thanh toán trong cùng kỳ |
 | GET | `/api/reports/service-usage` | Tổng hợp tiền theo sinh viên, dịch vụ và khoảng ngày |
 | GET | `/api/reports/service-revenue` | Báo cáo doanh thu từng dịch vụ theo tháng |
 
@@ -864,7 +914,7 @@ ghi nhận thời điểm hiện tại.
 | Method | API hiện có | Chức năng |
 |---|---|---|
 | GET | `/api/vehicles` | Tra cứu xe đã đăng ký vé tháng; có thể lọc theo tháng/năm |
-| POST | `/api/monthly-vehicle-registrations` | Đăng ký xe vé tháng; kiểm tra giới hạn |
+| POST | `/api/monthly-vehicle-registrations` | Đăng ký xe vé tháng; kiểm tra giới hạn và tự tạo/cập nhật hóa đơn chưa thanh toán |
 | GET | `/api/monthly-vehicle-registrations` | Tra cứu đăng ký; có thể lọc theo sinh viên/tháng/năm |
 | POST | `/api/monthly-vehicle-registrations/{registration_id}/events` | Ghi nhận lượt gửi hoặc lấy xe |
 | GET | `/api/reports/vehicle-registration-limits` | Thống kê số xe theo sinh viên và kiểm tra giới hạn trong kỳ |
@@ -873,18 +923,18 @@ ghi nhận thời điểm hiện tại.
 
 | Method | API hiện có | Chức năng |
 |---|---|---|
-| POST | `/api/invoices/generate` | Tạo/cập nhật hóa đơn của một sinh viên theo tháng/năm; tiền phòng nhập khi tạo mới |
-| GET | `/api/invoices` | Liệt kê hóa đơn, lọc theo sinh viên, tháng, năm và trạng thái |
-| GET | `/api/invoices/{id}` | Xem chi tiết hóa đơn |
-| PATCH | `/api/invoices/{id}/status` | Cập nhật trạng thái thanh toán |
+| POST | `/api/invoices/generate` | Tạo/cập nhật hóa đơn của một sinh viên theo tháng/năm; tiền phòng nhập khi tạo thủ công mới |
+| GET | `/api/invoices` | Liệt kê hóa đơn kèm chi tiết dịch vụ; lọc theo sinh viên, tháng, năm và trạng thái |
+| GET | `/api/invoices/{id}` | Xem chi tiết hóa đơn và các dòng dịch vụ |
+| PATCH | `/api/invoices/{id}/status` | Cập nhật trạng thái thanh toán; hóa đơn đã thanh toán không nhận thêm khoản thu trong kỳ |
 | GET | `/api/reports/monthly-student-costs` | Chi phí theo sinh viên nội trú trong tháng, không phụ thuộc hóa đơn |
 
 ## 6.8. Yêu cầu dữ liệu truy vấn
 
 1. Liệt kê thông tin sinh viên có thời gian ở KTX giao với tháng được chọn,
    cùng tiền phòng, dịch vụ, vé tháng và tổng tiền phải trả. Tiền phòng
-   tính trọn tháng nếu sinh viên ở ít nhất một ngày; kết quả sắp xếp theo
-   họ tên và có thể in toàn bộ danh sách.
+   tính trọn tháng theo lượt ở có thời lượng lớn hơn 0; kết quả sắp xếp theo
+   họ tên và có thể in toàn bộ danh sách hoặc phiếu riêng từng sinh viên.
 2. Liệt kê sinh viên, tên dịch vụ và tổng tiền mỗi sinh viên sử dụng cho
    từng dịch vụ trong khoảng từ ngày bắt đầu đến ngày kết thúc.
 3. Liệt kê sinh viên, khách đến thăm và số lần khách đến theo tuần hoặc
@@ -982,9 +1032,10 @@ của xe không đăng ký vé tháng, cổng thanh toán trực tuyến và ứ
 động không nằm trong phạm vi đã xác định.
 
 Phương thức thanh toán thực tế chưa được triển khai; trạng thái hóa đơn
-được Staff cập nhật thủ công. Khi chuyển phòng trong tháng, báo cáo chi
-phí hiện cộng tiền tháng của từng lượt phân phòng giao với kỳ; hóa đơn
-được lập riêng theo một khoản tiền phòng do Staff nhập.
+được Staff cập nhật thủ công. Hóa đơn chưa thanh toán được tự tạo/cập nhật
+khi phát sinh phân phòng, sử dụng dịch vụ hoặc đăng ký vé tháng; Staff vẫn
+có thể lập hóa đơn thủ công. Khi chuyển phòng trong tháng, mỗi lượt ở có
+thời lượng lớn hơn 0 và giao với kỳ được tính trọn đơn giá tháng của phòng.
 
 ## 8.3. Hướng phát triển
 

@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
+from apps.invoices.models import Invoice
 from apps.services.models import Service, ServiceUsage
 from apps.students.models import Student
 
@@ -34,11 +35,56 @@ class ServiceApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Decimal(response.data["applied_price"]), Decimal("15000.00"))
+        invoice = Invoice.objects.get(
+            student=self.student,
+            month=11,
+            year=2026,
+        )
+        self.assertEqual(invoice.service_amount, Decimal("30000.00"))
+        self.assertEqual(invoice.total_amount, Decimal("30000.00"))
+        self.assertEqual(invoice.service_lines.get().service_name, "Giặt là")
+        invoice_list = self.client.get(
+            "/api/invoices",
+            {"month": 11, "year": 2026},
+        )
+        self.assertEqual(invoice_list.status_code, 200)
+        self.assertEqual(len(invoice_list.data), 1)
         self.service.price = Decimal("20000.00")
         self.service.save()
         usage = ServiceUsage.objects.get(pk=response.data["id"])
         self.assertEqual(usage.applied_price, Decimal("15000.00"))
         self.assertEqual(usage.amount, Decimal("30000.00"))
+
+    def test_usage_cannot_change_a_paid_invoice_period(self):
+        create_invoice = self.client.post(
+            "/api/invoices/generate",
+            {
+                "student_id": self.student.pk,
+                "month": 11,
+                "year": 2026,
+                "room_amount": "0.00",
+            },
+            format="json",
+        )
+        invoice = Invoice.objects.get(pk=create_invoice.data["id"])
+        invoice.status = Invoice.PaymentStatus.PAID
+        invoice.save()
+
+        response = self.client.post(
+            "/api/service-usages",
+            {
+                "student_id": self.student.pk,
+                "service_id": self.service.pk,
+                "used_at": "2026-11-06T09:00:00Z",
+                "quantity": 2,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(ServiceUsage.objects.count(), 0)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.PaymentStatus.PAID)
 
     def test_usage_requires_positive_quantity_and_existing_student(self):
         payload = {

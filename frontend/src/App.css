@@ -529,6 +529,15 @@ details summary {
   color: #2d4359;
 }
 
+.invoice-service-lines {
+  display: grid;
+  gap: 5px;
+  padding: 6px 0;
+  border-top: 1px solid #edf0f3;
+  color: #647587;
+  font-size: 9px;
+}
+
 .empty-state {
   padding: 36px 12px;
   color: #8997a4;
@@ -578,6 +587,20 @@ details summary {
 
 .report-panel .panel-heading {
   margin-bottom: 14px;
+}
+
+.report-print-controls {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.report-print-controls label {
+  min-width: 180px;
+}
+
+.student-print-only {
+  display: none;
 }
 
 .report-tables {
@@ -686,6 +709,29 @@ details summary {
     overflow: visible;
   }
 
+  #monthly-student-cost-report[data-print-mode="student"] .cost-list-print {
+    display: none;
+  }
+
+  #monthly-student-cost-report[data-print-mode="student"] .student-print-only {
+    display: block;
+  }
+
+  #monthly-student-cost-report[data-print-mode="student"] .student-print-only h2 {
+    margin-bottom: 8px;
+    color: #000;
+  }
+
+  #monthly-student-cost-report[data-print-mode="student"] .student-print-only p {
+    margin-bottom: 6px;
+    color: #000;
+  }
+
+  #monthly-student-cost-report[data-print-mode="student"] .student-print-only th,
+  #monthly-student-cost-report[data-print-mode="student"] .student-print-only td {
+    color: #000;
+  }
+
   #monthly-student-cost-report table {
     min-width: 0;
     width: 100%;
@@ -742,6 +788,10 @@ details summary {
     align-items: start;
     flex-direction: column;
     gap: 14px;
+  }
+
+  .report-print-controls {
+    flex-wrap: wrap;
   }
 
   .report-period-controls {

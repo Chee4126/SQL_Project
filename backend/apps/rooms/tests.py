@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
+from apps.invoices.models import Invoice
 from apps.rooms.models import Room, RoomAssignment
 from apps.students.models import Student
 
@@ -72,6 +73,37 @@ class RoomApiTests(APITestCase):
 
     def test_room_type_api_is_removed(self):
         self.assertEqual(self.client.get("/api/room-types").status_code, 404)
+
+    def test_room_assignment_creates_invoice_for_its_month(self):
+        room = self.create_room()
+        student = Student.objects.create(student_id="SV011", name="Le Mai")
+
+        zero_length_assignment = self.client.post(
+            "/api/room-assignments",
+            {
+                "student_id": student.pk,
+                "room_id": room.pk,
+                "start_date": "2026-11-06",
+                "end_date": "2026-11-06",
+            },
+            format="json",
+        )
+        response = self.client.post(
+            "/api/room-assignments",
+            {
+                "student_id": student.pk,
+                "room_id": room.pk,
+                "start_date": "2026-11-06",
+            },
+            format="json",
+        )
+
+        self.assertEqual(zero_length_assignment.status_code, 201)
+        self.assertEqual(response.status_code, 201, response.data)
+        invoice = Invoice.objects.get(student=student, month=11, year=2026)
+        self.assertEqual(invoice.room_amount, Decimal("1800000.00"))
+        self.assertEqual(invoice.total_amount, Decimal("1800000.00"))
+        self.assertEqual(invoice.status, Invoice.PaymentStatus.UNPAID)
 
     def test_room_delete_is_blocked_by_assignment_history(self):
         room = self.create_room()

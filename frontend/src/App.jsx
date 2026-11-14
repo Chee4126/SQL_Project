@@ -102,6 +102,8 @@ function App({ user, onLogout, onUserUpdated }) {
   const [reportErrors, setReportErrors] = useState({})
   const [reportLoading, setReportLoading] = useState(false)
   const [printRequested, setPrintRequested] = useState(false)
+  const [printMode, setPrintMode] = useState('list')
+  const [reportStudentId, setReportStudentId] = useState('')
   const [services, setServices] = useState([])
   const [serviceUsages, setServiceUsages] = useState([])
   const [serviceLoading, setServiceLoading] = useState(false)
@@ -169,8 +171,8 @@ function App({ user, onLogout, onUserUpdated }) {
   }, [filters])
 
   useEffect(() => {
-    loadInvoices()
-  }, [loadInvoices])
+    if (page === 'invoices') loadInvoices()
+  }, [page, loadInvoices])
 
   // Tải độc lập từng báo cáo để một API lỗi không ẩn kết quả các báo cáo khác.
   const loadReports = useCallback(async () => {
@@ -624,7 +626,7 @@ function App({ user, onLogout, onUserUpdated }) {
           <span aria-hidden="true">i</span>
           <p>
             {{
-              invoices: 'Hóa đơn được tổng hợp từ dịch vụ và dữ liệu vé xe đã ghi nhận.',
+              invoices: 'Hóa đơn tự cập nhật khi phát sinh tiền phòng, dịch vụ hoặc vé tháng.',
               reports: 'Báo cáo chỉ tổng hợp trên các nguồn dữ liệu đã có trong hệ thống.',
               services: 'Giá dịch vụ được lưu theo từng lần sử dụng để bảo toàn lịch sử.',
               vehicles: 'Mỗi sinh viên tối đa 2 xe vé tháng; lượt gửi/lấy phải thuộc kỳ đăng ký.',
@@ -691,7 +693,7 @@ function App({ user, onLogout, onUserUpdated }) {
             </h2>
             <p>
               {{
-                invoices: 'Theo dõi chi phí, trạng thái thanh toán và lập hóa đơn cho sinh viên.',
+                invoices: 'Hóa đơn tự cập nhật khi phát sinh tiền phòng, dịch vụ hoặc vé tháng.',
                 reports: 'Tổng hợp chi phí, dịch vụ và đăng ký xe theo tháng được chọn.',
                 services: 'Quản lý đơn giá, ghi nhận sử dụng và xem tổng hợp theo ngày.',
                 vehicles: 'Quản lý đăng ký xe và ghi nhận lượt gửi/lấy trong kỳ.',
@@ -780,19 +782,56 @@ function App({ user, onLogout, onUserUpdated }) {
               </article>
             </section>
 
-            <article className="panel report-panel" id="monthly-student-cost-report">
+            <article
+              className="panel report-panel"
+              id="monthly-student-cost-report"
+              data-print-mode={printMode}
+            >
               <div className="panel-heading">
                 <div>
                   <h2>Chi phí theo sinh viên</h2>
                   <p>Tổng hợp tiền phòng, dịch vụ và vé xe trong tháng, xếp theo tên sinh viên.</p>
                 </div>
-                <button
-                  className="refresh-button no-print"
-                  onClick={() => setPrintRequested(true)}
-                  disabled={reportLoading || reportData.costs.length === 0}
-                >
-                  In danh sách
-                </button>
+                <div className="report-print-controls no-print">
+                  <button
+                    className="refresh-button"
+                    onClick={() => {
+                      setPrintMode('list')
+                      setPrintRequested(true)
+                    }}
+                    disabled={reportLoading || reportData.costs.length === 0}
+                  >
+                    In danh sách
+                  </button>
+                  <label>
+                    Sinh viên cần in
+                    <select
+                      value={reportStudentId}
+                      onChange={(event) => setReportStudentId(event.target.value)}
+                      disabled={reportLoading || reportData.costs.length === 0}
+                    >
+                      <option value="">Chọn sinh viên</option>
+                      {reportData.costs.map((row) => (
+                        <option key={row.student_id} value={row.student_id}>
+                          {row.student_name} ({row.student_id})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className="refresh-button"
+                    onClick={() => {
+                      setPrintMode('student')
+                      setPrintRequested(true)
+                    }}
+                    disabled={
+                      reportLoading ||
+                      !reportData.costs.some((row) => row.student_id === reportStudentId)
+                    }
+                  >
+                    In cá nhân
+                  </button>
+                </div>
               </div>
               <p className="print-period">
                 Báo cáo chi phí tháng {filters.month}/{filters.year}
@@ -800,29 +839,46 @@ function App({ user, onLogout, onUserUpdated }) {
               {reportErrors.costs ? (
                 <div className="notice error" role="alert">{reportErrors.costs}</div>
               ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Sinh viên</th><th>Phòng</th><th>Dịch vụ</th><th>Vé xe</th>
-                        <th>Tổng phải trả</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reportData.costs.length === 0 ? (
-                        <tr><td className="empty-state" colSpan="5">Không có sinh viên nội trú trong kỳ.</td></tr>
-                      ) : reportData.costs.map((row) => (
-                        <tr key={row.student_id}>
-                          <td><strong>{row.student_name}</strong><small className="cell-subtitle">{row.student_id}</small></td>
-                          <td>{formatCurrency(row.room_amount)}</td>
-                          <td>{formatCurrency(row.service_amount)}</td>
-                          <td>{formatCurrency(row.vehicle_amount)}</td>
-                          <td className="amount-cell">{formatCurrency(row.total_amount)}</td>
+                <>
+                  <div className="table-wrap cost-list-print">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Sinh viên</th><th>Phòng</th><th>Dịch vụ</th><th>Vé xe</th>
+                          <th>Tổng phải trả</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {reportData.costs.length === 0 ? (
+                          <tr><td className="empty-state" colSpan="5">Không có sinh viên nội trú trong kỳ.</td></tr>
+                        ) : reportData.costs.map((row) => (
+                          <tr key={row.student_id}>
+                            <td><strong>{row.student_name}</strong><small className="cell-subtitle">{row.student_id}</small></td>
+                            <td>{formatCurrency(row.room_amount)}</td>
+                            <td>{formatCurrency(row.service_amount)}</td>
+                            <td>{formatCurrency(row.vehicle_amount)}</td>
+                            <td className="amount-cell">{formatCurrency(row.total_amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {reportData.costs.filter((row) => row.student_id === reportStudentId).map((row) => (
+                    <section className="student-print-only" key={row.student_id}>
+                      <h2>{row.student_name}</h2>
+                      <p>Mã sinh viên: {row.student_id}</p>
+                      <p>Kỳ thanh toán: {filters.month}/{filters.year}</p>
+                      <table>
+                        <tbody>
+                          <tr><th>Tiền phòng</th><td>{formatCurrency(row.room_amount)}</td></tr>
+                          <tr><th>Tiền dịch vụ</th><td>{formatCurrency(row.service_amount)}</td></tr>
+                          <tr><th>Tiền vé xe</th><td>{formatCurrency(row.vehicle_amount)}</td></tr>
+                          <tr><th>Tổng phải trả</th><td className="amount-cell">{formatCurrency(row.total_amount)}</td></tr>
+                        </tbody>
+                      </table>
+                    </section>
+                  ))}
+                </>
               )}
             </article>
 
@@ -1051,6 +1107,21 @@ function App({ user, onLogout, onUserUpdated }) {
                           <div className="breakdown">
                             <span>Phòng <b>{formatCurrency(invoice.room_amount)}</b></span>
                             <span>Dịch vụ <b>{formatCurrency(invoice.service_amount)}</b></span>
+                            {invoice.service_lines?.length ? (
+                              <div className="invoice-service-lines">
+                                {invoice.service_lines.map((line) => (
+                                  <div key={line.id}>
+                                    {line.service_name} — {line.quantity}{line.unit ? ` ${line.unit}` : ''}
+                                    {' × '}{formatCurrency(line.applied_price)}
+                                    {' = '}{formatCurrency(line.amount)}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : Number(invoice.service_amount) > 0 ? (
+                              <span>Chi tiết dịch vụ chưa có</span>
+                            ) : (
+                              <span>Không phát sinh dịch vụ</span>
+                            )}
                             <span>Vé xe <b>{formatCurrency(invoice.vehicle_amount)}</b></span>
                             <span>Gửi xe <b>{formatCurrency(invoice.parking_amount)}</b></span>
                           </div>

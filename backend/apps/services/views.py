@@ -1,13 +1,16 @@
 from datetime import date
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.invoices.services import refresh_invoice_for_period
 from apps.services.models import Service, ServiceUsage
 from apps.services.serializers import ServiceSerializer, ServiceUsageSerializer
 
@@ -35,6 +38,17 @@ class ServiceDetailView(generics.RetrieveUpdateDestroyAPIView):
 class ServiceUsageCreateView(generics.CreateAPIView):
     queryset = ServiceUsage.objects.select_related("student", "service")
     serializer_class = ServiceUsageSerializer
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        usage = serializer.save()
+        used_at = timezone.localtime(usage.used_at)
+        refresh_invoice_for_period(
+            student=usage.student,
+            month=used_at.month,
+            year=used_at.year,
+            use_assignment_room=True,
+        )
 
 
 # Tổng hợp số lượng và chi phí theo sinh viên, dịch vụ và khoảng ngày.

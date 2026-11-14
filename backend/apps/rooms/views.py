@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count, F, Q
 from django.utils.dateparse import parse_date
 from django.utils import timezone
@@ -6,6 +7,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.invoices.services import refresh_invoice_for_period
 from apps.rooms.models import Room, RoomAssignment
 from apps.rooms.serializers import (
     RoomAssignmentEndSerializer,
@@ -70,6 +72,16 @@ class RoomDetailView(generics.RetrieveUpdateDestroyAPIView):
 # Liệt kê lượt phân phòng và phân phòng mới cho sinh viên.
 class RoomAssignmentListCreateView(generics.ListCreateAPIView):
     serializer_class = RoomAssignmentSerializer
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        assignment = serializer.save()
+        refresh_invoice_for_period(
+            student=assignment.student,
+            month=assignment.start_date.month,
+            year=assignment.start_date.year,
+            use_assignment_room=True,
+        )
 
     def get_queryset(self):
         queryset = RoomAssignment.objects.select_related("student", "room")
